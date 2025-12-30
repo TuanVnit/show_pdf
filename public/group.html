@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Group Data - PDF Extract Viewer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .group-container {
+            display: grid;
+            grid-template-columns: 25% 30% 60px 1fr;
+            gap: 20px;
+            padding: 20px;
+            height: calc(100vh - 80px);
+            overflow: hidden;
+        }
+
+        .panel-column {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .panel-header {
+            padding: 15px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8f9fa;
+        }
+
+        .panel-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+        }
+
+        .controls-column {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .btn-switch {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-switch:hover {
+            transform: scale(1.1);
+            background: #2980b9;
+        }
+
+        /* Item Styles */
+        .groupable-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .groupable-item:hover {
+            background: #f1f8ff;
+        }
+
+        .groupable-item.selected {
+            background: #e1f0fa;
+            border-color: var(--primary);
+        }
+
+        .item-checkbox {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .item-content {
+            flex: 1;
+            font-size: 0.9em;
+        }
+
+        .item-type-icon {
+            width: 24px;
+            text-align: center;
+            color: var(--text-secondary);
+        }
+
+        /* Group Styles */
+        .group-card {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 15px;
+            background: #fff;
+        }
+
+        .group-header {
+            padding: 10px 15px;
+            background: #f8f9fa;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 8px 8px 0 0;
+        }
+
+        .group-tag {
+            font-size: 0.8em;
+            padding: 2px 8px;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+        }
+
+        .group-items {
+            padding: 10px;
+        }
+
+        .group-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .tag-select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            width: 100%;
+        }
+
+        .preview-img-small {
+            width: 40px;
+            height: 40px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+
+        /* Tag Radio Styles */
+        /* Vertical (Legacy/Unused but kept for ref) */
+        .tag-selection-area {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            /* ... */
+        }
+
+        /* Horizontal for Header */
+        .tag-selection-area-horizontal {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: 5px;
+            width: 100%;
+            /* Remove bulky border/bg since it's in header */
+        }
+
+        .tag-radio-label {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 4px 8px;
+            /* Smaller padding */
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            text-align: center;
+            /* width: auto;  Auto width for horizontal */
+            min-width: 60px;
+            color: white;
+            opacity: 0.6;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+            font-weight: 500;
+        }
+
+        .tag-radio-label:hover {
+            opacity: 0.8;
+        }
+
+        .tag-radio-label.selected {
+            opacity: 1;
+            border-color: #333;
+            /* High contrast border */
+            transform: scale(1.05);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+            font-weight: 700;
+        }
+
+        .tag-radio-label.selected::before {
+            content: '✓ ';
+            margin-right: 5px;
+        }
+
+        .tag-radio-label input {
+            display: none;
+        }
+
+        /* Sortable Drag Styles */
+        .sortable-ghost {
+            opacity: 0.5;
+            background: #e3f2fd;
+            border: 1px dashed #3498db;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-header {
+            font-weight: bold;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .tag-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+
+        .tag-table th,
+        .tag-table td {
+            border-bottom: 1px solid #eee;
+            padding: 8px;
+            text-align: left;
+        }
+
+        .color-input {
+            width: 40px;
+            height: 30px;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <header class="main-header">
+            <div class="header-left">
+                <a href="/" class="btn-icon header-btn" title="Back to Home"><i class="fas fa-arrow-left"></i></a>
+                <div class="logo">
+                    <i class="fas fa-layer-group"></i>
+                    <span>Group Data</span>
+                </div>
+            </div>
+            <div class="header-center">
+                <select id="extractionSelect" class="tag-select" style="width: 300px;">
+                    <option value="">-- Select Extraction --</option>
+                </select>
+                <select id="pageSelect" class="tag-select" style="width: 100px; margin-left:10px;">
+                    <option value="">Page -</option>
+                </select>
+            </div>
+            <div class="header-right">
+                <button class="btn-primary" onclick="saveGroups()">
+                    <i class="fas fa-save"></i> Save Groups
+                </button>
+            </div>
+        </header>
+
+        <div class="group-container">
+            <!-- PDF Column (New) -->
+            <div class="panel-column">
+                <div class="panel-header">
+                    <span><i class="fas fa-file-pdf"></i> Source PDF</span>
+                </div>
+                <div class="panel-body" id="pdfContainer" style="padding:0; overflow:hidden; position:relative;">
+                    <iframe id="pdfViewer" style="width:100%; height:100%; border:none; display:none;"></iframe>
+                    <div id="noPdfMessage"
+                        style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); color:#999; text-align:center;">
+                        <i class="fas fa-file-pdf" style="font-size:3rem; margin-bottom:10px; display:block;"></i>
+                        Select an extraction with PDF source
+                    </div>
+                </div>
+            </div>
+
+            <!-- Source Column -->
+            <div class="panel-column">
+                <div class="panel-header">
+                    <span><i class="fas fa-inbox"></i> Source Items</span>
+                    <span id="sourceCount" class="badge">0</span>
+                </div>
+                <!-- Debug Header inside column -->
+                <div
+                    style="padding: 10px; background: #eee; border-bottom: 1px solid #ddd; font-size: 0.8rem; display: flex; justify-content: space-between;">
+                    <span id="debugPageInfo">Page: - / Items: -</span>
+                    <button class="btn-small"
+                        onclick="loadExtractionData(currentExtraction.id, document.getElementById('pageSelect').value)"
+                        style="font-size:0.7em; padding: 2px 5px;">Refresh</button>
+                </div>
+                <div class="panel-body" id="sourceList">
+                    <p class="loading">Vui lòng chọn extraction để bắt đầu...</p>
+                </div>
+            </div>
+
+            <!-- Controls Column -->
+            <div class="controls-column">
+                <button class="btn-switch" onclick="moveToGroup()" title="Create Group from Selected">
+                    <i class="fas fa-arrow-right"></i>
+                </button>
+                <button class="btn-switch" onclick="ungroupSelected()" title="Ungroup Selected"
+                    style="background: #e74c3c;">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+            </div>
+
+            <!-- Groups Column -->
+            <div class="panel-column">
+                <div class="panel-header" style="flex-direction: column; align-items: flex-start;">
+                    <div
+                        style="width:100%; display:flex; justify-content:space-between; margin-bottom: 5px; align-items: center;">
+                        <span><i class="fas fa-layer-group"></i> Created Groups</span>
+                        <button class="btn-icon-small" onclick="openTagManager()" title="Manage Tags"
+                            style="color:#555;">
+                            <i class="fas fa-cog"></i>
+                        </button>
+                    </div>
+                    <!-- Tag Selection (Radios) - Horizontal -->
+                    <div id="tagSelectionArea" class="tag-selection-area-horizontal">
+                        <!-- Filled by JS -->
+                    </div>
+                </div>
+                <div class="panel-body" id="groupList">
+                    <!-- Groups go here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.14.0/Sortable.min.js"></script>
+    <!-- Tag Manager Modal -->
+    <div id="tagManagerModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>Manage Tags</span>
+                <button onclick="closeTagManager()" style="border:none;background:none;cursor:pointer;">X</button>
+            </div>
+            <table class="tag-table" id="tagManagerList">
+                <thead>
+                    <tr>
+                        <th>Label</th>
+                        <th>Color</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+
+            <div style="background:#f9f9f9; padding:10px; border-radius:4px; margin-bottom:15px;">
+                <div style="margin-bottom:5px; font-weight:bold;">Add New Tag</div>
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="newTagName" placeholder="Tag Name" class="tag-select">
+                    <input type="color" id="newTagColor" value="#3498db" class="color-input">
+                    <button class="btn-small" onclick="addNewTag()">Add</button>
+                </div>
+            </div>
+
+            <div style="text-align:right; gap:10px; display:flex; justify-content:flex-end;">
+                <button onclick="closeTagManager()" class="btn-switch"
+                    style="width:80px; height:36px; border-radius:4px; background:#95a5a6; font-size:0.9rem;">Cancel</button>
+                <button onclick="saveTagsToServer()" class="btn-switch"
+                    style="width:80px; height:36px; border-radius:4px; font-size:0.9rem;">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/group-defines.js"></script>
+    <script src="js/group.js"></script>
+</body>
+
+</html>

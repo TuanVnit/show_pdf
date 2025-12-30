@@ -1,0 +1,9 @@
+{
+    "ignore": [
+        "uploads/*",
+        "history.json",
+        ".git",
+        "node_modules"
+    ],
+    "ext": "js,json,html,css"
+}

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Extract Viewer - Upload</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="main-header">
+            <div class="header-left">
+                <div class="logo">
+                    <i class="fas fa-file-pdf"></i>
+                    <span>PDF Extract Viewer</span>
+                </div>
+            </div>
+            <div class="header-center">
+                <h1>Upload ZIP File</h1>
+                <p>Tải lên file ZIP chứa kết quả extraction từ PDF</p>
+            </div>
+            <div class="header-right">
+                <a href="/" class="btn-home">
+                    <i class="fas fa-home"></i>
+                    Trang chủ
+                </a>
+            </div>
+        </header>
+
+        <!-- Upload Zone -->
+        <div class="upload-zone-container">
+            <div class="upload-container">
+                <div class="dropzone" id="dropzone">
+                    <div class="dropzone-content">
+                        <div class="upload-icon">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                        </div>
+                        <h2>Kéo thả file ZIP vào đây</h2>
+                        <p>hoặc click để chọn file</p>
+                        <button class="btn-primary" onclick="document.getElementById('fileInput').click()">
+                            <i class="fas fa-folder-open"></i>
+                            Chọn File ZIP
+                        </button>
+                        <input type="file" id="fileInput" accept=".zip" hidden>
+                        <div class="file-info">
+                            <small><i class="fas fa-info-circle"></i> File .zip, tối đa 500MB</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="processing" id="processing" style="display: none;">
+                    <div class="spinner"></div>
+                    <p id="processingText">Đang upload và xử lý...</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <small id="progressText">0%</small>
+                </div>
+
+                <div class="error-message" id="errorMessage" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p id="errorText"></p>
+                    <button class="btn-secondary" onclick="resetUpload()">Thử lại</button>
+                </div>
+
+                <div class="success-message" id="successMessage" style="display: none;">
+                    <i class="fas fa-check-circle"></i>
+                    <h2>Upload thành công!</h2>
+                    <p id="successText"></p>
+                    <div class="success-actions">
+                        <a href="/" class="btn-primary">
+                            <i class="fas fa-home"></i>
+                            Về trang chủ
+                        </a>
+                        <button class="btn-secondary" onclick="resetUpload()">
+                            <i class="fas fa-upload"></i>
+                            Upload file khác
+                        </button>
+                    </div>
+                </div>
+
+                <div class="features">
+                    <div class="feature-item">
+                        <i class="fas fa-server"></i>
+                        <span>Node.js Backend</span>
+                    </div>
+                    <div class="feature-item">
+                        <i class="fas fa-images"></i>
+                        <span>Image Preview</span>
+                    </div>
+                    <div class="feature-item">
+                        <i class="fas fa-table"></i>
+                        <span>Excel Tables</span>
+                    </div>
+                    <div class="feature-item">
+                        <i class="fas fa-file-alt"></i>
+                        <span>Text Content</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/upload.js"></script>
+</body>
+
+</html>

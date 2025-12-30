@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Extract Viewer - Trang chủ</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.css"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="main-header">
+            <div class="header-left">
+                <button id="toggleSidebar" class="btn-icon header-btn" title="Toggle Sidebar">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <!-- <div class="logo">
+                    <i class="fas fa-file-pdf"></i>
+                    <span>PDF Extract Viewer</span>
+                </div> -->
+            </div>
+            <div class="header-center">
+                <h1 id="pageTitle">Danh sách Extractions</h1>
+                <p id="pageSubtitle">Tất cả các file ZIP đã được giải nén</p>
+            </div>
+            <div class="header-right">
+                <a href="/upload.html" class="btn-upload">
+                    <i class="fas fa-upload"></i>
+                    Upload ZIP mới
+                </a>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar Tree -->
+            <aside class="sidebar-tree">
+                <div class="sidebar-header">
+                    <h3><i class="fas fa-folder-tree"></i> Extractions</h3>
+                    <span class="extraction-count" id="extractionCount">0</span>
+                </div>
+                <div class="sidebar-content" id="sidebarContent">
+                    <p class="loading">Đang tải...</p>
+                </div>
+                <div class="sidebar-footer">
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <i class="fas fa-file"></i>
+                            <span id="totalPages">0</span>
+                            <small>Pages</small>
+                        </div>
+                        <div class="stat-item">
+                            <i class="fas fa-images"></i>
+                            <span id="totalImages">0</span>
+                            <small>Images</small>
+                        </div>
+                        <div class="stat-item">
+                            <i class="fas fa-table"></i>
+                            <span id="totalTables">0</span>
+                            <small>Tables</small>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Content Area -->
+            <main class="content-area" id="contentArea">
+                <!-- TABS HEADER -->
+                <div class="main-tabs">
+                    <button class="tab-btn active" onclick="switchTab('view-pdf')" id="tab-view-pdf-btn">
+                        <i class="fas fa-file-pdf"></i> View PDF
+                    </button>
+                    <button class="tab-btn" onclick="switchTab('group-data')" id="tab-group-data-btn">
+                        <i class="fas fa-layer-group"></i> Group Data
+                    </button>
+                </div>
+
+                <!-- TAB 1: VIEW PDF -->
+                <div id="view-pdf-content" class="tab-content active"
+                    style="height: calc(100% - 45px); overflow:hidden;">
+                    <div class="welcome-message">
+                        <i class="fas fa-hand-pointer"></i>
+                        <h2>Chọn một extraction từ sidebar</h2>
+                        <p>Click vào một extraction bên trái để xem nội dung chi tiết</p>
+                    </div>
+                </div>
+
+                <!-- TAB 2: GROUP DATA -->
+                <div id="group-data-content" class="tab-content">
+                    <div class="group-container" style="height: 100%; border:none; padding:10px;">
+                        <!-- PDF Column -->
+                        <div class="panel-column">
+                            <div class="panel-header">
+                                <span><i class="fas fa-file-pdf"></i> Source PDF</span>
+                            </div>
+                            <div class="panel-body" id="pdfContainer"
+                                style="padding:0; overflow:hidden; position:relative;">
+                                <iframe id="pdfViewer"
+                                    style="width:100%; height:100%; border:none; display:none;"></iframe>
+                                <div id="noPdfMessage"
+                                    style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); color:#999; text-align:center;">
+                                    <i class="fas fa-file-pdf"
+                                        style="font-size:3rem; margin-bottom:10px; display:block;"></i>
+                                    Select an extraction
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Source Column -->
+                        <div class="panel-column">
+                            <div class="panel-header">
+                                <span><i class="fas fa-inbox"></i> Source Items</span>
+                                <span id="sourceCount" class="badge">0</span>
+                                <!-- Hidden Extraction Select to satisfy group.js -->
+                                <select id="extractionSelect" style="display:none;"></select>
+                            </div>
+                            <div
+                                style="padding: 10px; background: #eee; border-bottom: 1px solid #ddd; font-size: 0.8rem; display: flex; justify-content: space-between; align-items:center;">
+                                <div style="display:flex; align-items:center; gap:5px;">
+                                    <span id="debugPageInfo">Page:</span>
+                                    <select id="pageSelect"
+                                        style="padding:2px; font-size:0.8rem; max-width:100px;"></select>
+                                </div>
+                                <button class="btn-small"
+                                    onclick="if(window.currentExtraction) loadExtractionData(window.currentExtraction, document.getElementById('pageSelect')?.value)"
+                                    style="font-size:0.7em; padding: 2px 5px;">Refresh</button>
+                            </div>
+                            <div class="panel-body" id="sourceList">
+                                <p class="loading">Select extraction...</p>
+                            </div>
+                        </div>
+
+                        <!-- Controls Column -->
+                        <div class="controls-column">
+                            <button class="btn-switch" onclick="moveToGroup()" title="Create Group from Selected"><i
+                                    class="fas fa-arrow-right"></i></button>
+                            <button class="btn-switch" onclick="ungroupSelected()" title="Ungroup Selected"
+                                style="background: #e74c3c;"><i class="fas fa-arrow-left"></i></button>
+                        </div>
+
+                        <!-- Groups Column -->
+                        <div class="panel-column">
+                            <div class="panel-header" style="flex-direction: column; align-items: flex-start;">
+                                <div
+                                    style="width:100%; display:flex; justify-content:space-between; margin-bottom: 5px; align-items: center;">
+                                    <span><i class="fas fa-layer-group"></i> Created Groups</span>
+                                    <button class="btn-icon-small" onclick="openTagManager()" title="Manage Tags"
+                                        style="color:#555;"><i class="fas fa-cog"></i></button>
+                                </div>
+                                <div id="tagSelectionArea" class="tag-selection-area-horizontal"></div>
+                            </div>
+                            <div class="panel-body" id="groupList"></div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Lightbox for images -->
+        <div id="lightbox" class="lightbox" style="display: none;">
+            <div class="lightbox-overlay" onclick="closeLightbox()"></div>
+            <div class="lightbox-content">
+                <button class="lightbox-close" onclick="closeLightbox()">
+                    <i class="fas fa-times"></i>
+                </button>
+                <img id="lightboxImage" src="" alt="">
+                <div class="lightbox-info">
+                    <p id="lightboxFilename"></p>
+                    <button class="btn-primary" onclick="downloadCurrentImage()">
+                        <i class="fas fa-download"></i> Download
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tag Manager Modal -->
+    <div id="tagManagerModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>Manage Tags</span>
+                <button onclick="closeTagManager()" style="border:none;background:none;cursor:pointer;">X</button>
+            </div>
+            <table class="tag-table" id="tagManagerList">
+                <thead>
+                    <tr>
+                        <th>Label</th>
+                        <th>Color</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <div style="background:#f9f9f9; padding:10px; border-radius:4px; margin-bottom:15px;">
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="newTagName" placeholder="Tag Name" class="tag-select">
+                    <input type="color" id="newTagColor" value="#3498db" class="color-input">
+                    <button class="btn-small" onclick="addNewTag()">Add</button>
+                </div>
+            </div>
+            <div style="text-align:right; gap:10px; display:flex; justify-content:flex-end;">
+                <button onclick="saveTagsToServer()" class="btn-switch"
+                    style="width:80px; height:36px; border-radius:4px; font-size:0.9rem;">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Copy Path Modal -->
+    <div id="copyPathModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-network-wired"></i> Đường dẫn mạng LAN</h3>
+                <button class="close-modal" onclick="closeCopyModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <p>Sao chép đường dẫn này và dán vào <b>File Explorer</b> (Win+E) hoặc hộp thoại <b>Run</b> (Win+R) để
+                    sửa file trực tiếp:</p>
+                <div class="copy-input-group">
+                    <input type="text" id="networkPathInput" readonly>
+                    <button class="btn btn-primary" onclick="executeCopy()">
+                        <i class="fas fa-copy"></i> Sao chép
+                    </button>
+                </div>
+                <div id="copySuccessMsg" class="copy-success" style="display: none;">
+                    <i class="fas fa-check-circle"></i> Đã sao chép!
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- COPY PATH MODAL ENDS -->
+
+    <!-- Scripts -->
+    <script src="js/group-defines.js"></script>
+    <script src="js/group.js"></script>
+    <script src="js/home.js"></script>
+    <script>
+        // Tab Switching Logic
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+            document.getElementById(tabId + '-content').classList.add('active');
+            document.getElementById('tab-' + tabId + '-btn').classList.add('active');
+
+            // Sync Logic when opening Group Data
+            // Sync Logic when opening Group Data
+            if (tabId === 'group-data') {
+                try {
+                    if (typeof currentExtraction !== 'undefined' && currentExtraction) {
+                        const homePageStr = String(typeof currentPage !== 'undefined' ? currentPage : '');
+                        const groupPageStr = typeof selectedPage !== 'undefined' ? String(selectedPage) : '';
+
+                        if (typeof groupExtractionId !== 'undefined' && groupExtractionId !== currentExtraction) {
+                            console.log('Syncing Group Tab to ID:', currentExtraction);
+                            loadExtractionData(currentExtraction, homePageStr);
+                        } else if (homePageStr && groupPageStr && homePageStr !== groupPageStr) {
+                            console.log('Syncing Group Tab to Page:', homePageStr);
+                            // Set variable in group.js
+                            if (typeof selectedPage !== 'undefined') { // Check if we can access it
+                                selectedPage = homePageStr;
+                                const pSel = document.getElementById('pageSelect');
+                                if (pSel) pSel.value = selectedPage;
+                                renderSourceList(); // group.js function
+                                renderGroupList(); // group.js function
+                            }
+                        }
+                    } else {
+                        // Home has no extraction? Maybe user loaded Group Tab first? 
+                        // If group.js loaded an extraction, does home.js know?
+                        // Reciprocal sync is harder. Let's assume Home is Driver.
+                    }
+                } catch (e) { console.error('Sync Error:', e); }
+            }
+        }
+
+        // Bridge: Overwrite loadPageContent slightly or hook into it?
+        // Better: Make home.js update a global variable we can read.
+    </script>
+</body>
+
+</html>
