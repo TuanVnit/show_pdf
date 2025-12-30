@@ -475,14 +475,14 @@ function renderSourceList() {
                 </div>
             `;
         } else {
+            // Only show type badge if it's not TEXT, or per user request: "remove TEXT"
+            const typeLabel = item.type.toUpperCase() === 'TEXT' ? '' : `<span class="item-type-badge" style="font-weight: bold; font-size: 0.8em; color: #555; width: 40px; margin-right:5px;">${item.type.toUpperCase()}</span>`;
+
             btn.innerHTML = `
                 <input type="checkbox" class="item-checkbox" value="${item.id}">
-                
                 ${imgHtml}
-                
-                <span class="item-type-badge" style="font-weight: bold; font-size: 0.8em; color: #555; width: 40px; margin-right:5px;">${item.type.toUpperCase()}</span>
+                ${typeLabel}
                 <span class="item-content-text" style="flex:1; word-break: break-all;">${label}</span>
-                <span class="item-page-badge" style="font-size: 0.8em; color: #999;">P${item.page}</span>
             `;
         }
 

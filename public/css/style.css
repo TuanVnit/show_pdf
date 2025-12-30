@@ -273,6 +273,27 @@ body.sidebar-collapsed .sidebar-tree {
     color: var(--text-light);
 }
 
+.btn-delete-small {
+    background: transparent;
+    border: none;
+    color: var(--text-light);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.btn-delete-small:hover {
+    background-color: #fee2e2;
+    color: var(--danger-color);
+}
+
+.btn-delete-small i,
+.fa-trash,
+.fa-trash-can {
+    color: var(--danger-color) !important;
+}
+
 .extraction-pages {
     padding-left: 14px;
     border-left: 1px solid var(--border-color);
@@ -702,7 +723,8 @@ body.sidebar-collapsed .sidebar-tree {
     padding: 20px;
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 16px;
+    justify-content: flex-start;
 }
 
 .groupable-item.type-image {

@@ -333,7 +333,7 @@ function renderImages(images, extractPath) {
                 </div>
                 <i class="fas fa-chevron-down toggle-icon"></i>
             </h3>
-            <div class="collapsible-content" id="images-section" style="display: none; flex-wrap: wrap; gap: 8px;">
+            <div class="collapsible-content" id="images-section" style="display: none;">
                 ${images.map(img => `
                     <div class="groupable-item type-image" style="cursor: zoom-in; display: flex; flex-direction: column; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; background: #fff;" onclick="openLightbox('/uploads/${extractPath}/${img.path}', '${img.filename}')">
                         <div style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 5px; min-height: 100px;">
