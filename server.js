@@ -587,7 +587,7 @@ function convertWorksheetToStyledHTML(worksheet, extractPath, relativeBase) {
                 }
             }
 
-            const value = cell.value || '';
+            const value = (cell.value !== null && cell.value !== undefined) ? cell.value : '';
             let displayValue = formatCellValue(value);
 
             // Handle Image Placeholders
@@ -605,8 +605,8 @@ function convertWorksheetToStyledHTML(worksheet, extractPath, relativeBase) {
 
                     console.log(`Debug Excel Image Path: ${imgSrc}`);
 
-                    // Adjusted size for better table aesthetics
-                    displayValue = `<img src="${imgSrc}" style="max-width: 100px; max-height: 80px; object-fit: contain; display: block; margin: 0 auto;" alt="${imgFilename}" />`;
+                    // Adjusted size for better table aesthetics - Increased limits to show full image
+                    displayValue = `<img src="${imgSrc}" style="max-width: 300px; max-height: 250px; object-fit: contain; display: block; margin: 0 auto;" alt="${imgFilename}" />`;
                 }
             }
 
@@ -659,10 +659,11 @@ function convertWorksheetToStyledHTML(worksheet, extractPath, relativeBase) {
                     const leftCol = range.tl.nativeCol;
 
                     // Estimate position (rough calculation)
+                    // Note: This is an approximation. Improved by increasing max limits.
                     const top = topRow * 25; // Approximate row height
                     const left = leftCol * 80; // Approximate column width
 
-                    html += `<img src="${dataUrl}" style="position: absolute; top: ${top}px; left: ${left}px; max-width: 150px; max-height: 100px;" />`;
+                    html += `<img src="${dataUrl}" style="position: absolute; top: ${top}px; left: ${left}px; max-width: 500px; max-height: 400px; object-fit: contain; z-index: 5;" />`;
                 }
             } catch (e) {
                 console.error('Error rendering image:', e);
@@ -753,6 +754,26 @@ function getCellStyle(cell, isMergedCell = false, mergedCellInfo = null) {
             let valign = cell.alignment.vertical;
             if (valign === 'center') valign = 'middle';
             styles.push(`vertical-align: ${valign}`);
+        }
+
+        // Text Rotation
+        if (cell.alignment.textRotation) {
+            if (cell.alignment.textRotation === 'vertical') {
+                styles.push('writing-mode: vertical-rl');
+                styles.push('text-orientation: upright');
+            } else if (typeof cell.alignment.textRotation === 'number') {
+                // Excel: 90 is bottom-to-top, -90 is top-to-bottom
+                if (cell.alignment.textRotation === 90) {
+                    styles.push('writing-mode: vertical-rl');
+                    styles.push('transform: rotate(180deg)');
+                } else if (cell.alignment.textRotation === -90 || cell.alignment.textRotation === 270) {
+                    styles.push('writing-mode: vertical-rl');
+                } else {
+                    // For other angles, use transform
+                    styles.push(`transform: rotate(${-cell.alignment.textRotation}deg)`);
+                    styles.push('display: inline-block');
+                }
+            }
         }
     }
 

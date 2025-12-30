@@ -163,6 +163,11 @@ async function loadExtractionPages(extractionId) {
 // Load content for a specific page
 async function loadPageContent(extractionId, pageNumber, pageIndex) {
     try {
+        // Switch to View PDF tab automatically when a page is selected
+        if (typeof switchTab === 'function') {
+            switchTab('view-pdf');
+        }
+
         currentPage = pageNumber;
 
         const response = await fetch(`/api/extraction/${extractionId}`);
@@ -757,7 +762,7 @@ function renderText(text, extractPath, textFile) {
                         ${lines.map((line, index) => `
                             <div class="draggable-line" data-index="${index}">
                                 <div class="drag-handle"><i class="fas fa-grip-lines"></i></div>
-                                <div class="line-content" contenteditable="true">${line}</div>
+                                <div class="line-content" contenteditable="true">${escapeHTML(line)}</div>
                             </div>
                         `).join('')}
                     </div>
@@ -772,13 +777,30 @@ function renderText(text, extractPath, textFile) {
 
 // Show welcome message
 function showWelcomeMessage() {
-    document.getElementById('contentArea').innerHTML = `
-        <div class="welcome-message">
-            <i class="fas fa-hand-pointer"></i>
-            <h2>Chọn một extraction từ sidebar</h2>
-            <p>Click vào một extraction bên trái để xem nội dung chi tiết</p>
-        </div>
-    `;
+    const viewPdfContent = document.getElementById('view-pdf-content');
+    if (viewPdfContent) {
+        viewPdfContent.innerHTML = `
+            <div class="welcome-message">
+                <i class="fas fa-hand-pointer"></i>
+                <h2>Chọn một extraction từ sidebar</h2>
+                <p>Click vào một extraction bên trái để xem nội dung chi tiết</p>
+            </div>
+        `;
+        // Optionally switch to View PDF tab to show the message
+        if (typeof switchTab === 'function') switchTab('view-pdf');
+    } else {
+        // Fallback in case tabs were somehow destroyed
+        const contentArea = document.getElementById('contentArea');
+        if (contentArea) {
+            contentArea.innerHTML = `
+                <div class="welcome-message">
+                    <i class="fas fa-hand-pointer"></i>
+                    <h2>Chọn một extraction từ sidebar</h2>
+                    <p>Click vào một extraction bên trái để xem nội dung chi tiết</p>
+                </div>
+            `;
+        }
+    }
 }
 
 // Delete extraction
@@ -839,6 +861,19 @@ function downloadCurrentImage() {
 }
 
 // Utility functions
+function escapeHTML(str) {
+    if (!str) return '';
+    return str.replace(/[&<>"']/g, function (m) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[m];
+    });
+}
+
 function downloadFile(url, filename) {
     const link = document.createElement('a');
     link.href = url;
