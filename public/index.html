@@ -186,29 +186,39 @@
     <div id="tagManagerModal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
-                <span>Manage Tags</span>
-                <button onclick="closeTagManager()" style="border:none;background:none;cursor:pointer;">X</button>
+                <span><i class="fas fa-tags"></i> Manage Tags</span>
+                <button onclick="closeTagManager()" class="btn-icon-small"><i class="fas fa-times"></i></button>
             </div>
-            <table class="tag-table" id="tagManagerList">
-                <thead>
-                    <tr>
-                        <th>Label</th>
-                        <th>Color</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-            <div style="background:#f9f9f9; padding:10px; border-radius:4px; margin-bottom:15px;">
-                <div style="display:flex; gap:10px;">
-                    <input type="text" id="newTagName" placeholder="Tag Name" class="tag-select">
-                    <input type="color" id="newTagColor" value="#3498db" class="color-input">
-                    <button class="btn-small" onclick="addNewTag()">Add</button>
+            <div style="flex:1; overflow-y:auto; padding: 20px;">
+                <table class="tag-table" id="tagManagerList">
+                    <thead>
+                        <tr>
+                            <th style="width: 60%;">Label</th>
+                            <th style="width: 20%;">Color</th>
+                            <th style="width: 20%; text-align:center;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+
+                <div style="background:#f8fafc; padding:15px; border-radius:10px; border: 1px solid #e2e8f0;">
+                    <p style="font-size: 0.85rem; font-weight: 600; color: var(--text-light); margin-bottom: 10px;">ADD
+                        NEW TAG</p>
+                    <div style="display:flex; gap:10px;">
+                        <input type="text" id="newTagName" placeholder="Tag Name" class="tag-edit-input"
+                            style="flex:1;">
+                        <input type="color" id="newTagColor" value="#3498db" class="color-input"
+                            style="width:40px; height:38px; padding:2px;">
+                        <button class="btn-small btn-primary" onclick="addNewTag()"
+                            style="padding: 0 15px;">Add</button>
+                    </div>
                 </div>
             </div>
-            <div style="text-align:right; gap:10px; display:flex; justify-content:flex-end;">
-                <button onclick="saveTagsToServer()" class="btn-switch"
-                    style="width:80px; height:36px; border-radius:4px; font-size:0.9rem;">Save</button>
+            <div class="tag-manager-footer">
+                <button onclick="closeTagManager()" class="btn-secondary"
+                    style="padding: 8px 20px; border-radius: 6px;">Cancel</button>
+                <button onclick="saveTagsToServer()" class="btn-primary"
+                    style="padding: 8px 25px; border-radius: 6px;">Save Changes</button>
             </div>
         </div>
     </div>

@@ -110,9 +110,13 @@ function renderTagManagerList() {
     (window.currentTags || []).forEach((tag, idx) => {
         tbody.innerHTML += `
             <tr>
-                <td><input type="text" value="${tag.label}" onchange="window.currentTags[${idx}].label=this.value; loadTags();" style="width:100px;"></td>
+                <td><input type="text" value="${tag.label}" onchange="window.currentTags[${idx}].label=this.value; loadTags();" class="tag-edit-input"></td>
                 <td><input type="color" value="${tag.color}" onchange="window.currentTags[${idx}].color=this.value; loadTags();" class="color-input"></td>
-                <td><button onclick="deleteTag(${idx})" style="color:red;">Del</button></td>
+                <td style="text-align:center;">
+                    <button onclick="deleteTag(${idx})" class="btn-delete-tag" title="Delete Tag">
+                        <i class="fas fa-trash-can"></i>
+                    </button>
+                </td>
             </tr>
         `;
     });
