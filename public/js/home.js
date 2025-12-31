@@ -163,12 +163,17 @@ async function loadExtractionPages(extractionId) {
 // Load content for a specific page
 async function loadPageContent(extractionId, pageNumber, pageIndex) {
     try {
-        // Switch to View PDF tab automatically when a page is selected
-        if (typeof switchTab === 'function') {
-            switchTab('view-pdf');
-        }
-
         currentPage = pageNumber;
+
+        // Maintain current tab if it's Group Data, otherwise switch to View PDF
+        if (typeof switchTab === 'function') {
+            const groupTabBtn = document.getElementById('tab-group-data-btn');
+            if (groupTabBtn && groupTabBtn.classList.contains('active')) {
+                switchTab('group-data');
+            } else {
+                switchTab('view-pdf');
+            }
+        }
 
         const response = await fetch(`/api/extraction/${extractionId}`);
         const data = await response.json();
@@ -653,7 +658,7 @@ async function loadTable(extractPath, tablePath, filename) {
                 <div class="table-footer">
                     <span>Sheet: ${data.sheetName} • ${data.rowCount} dòng x ${data.columnCount} cột</span>
                     <div class="action-buttons">
-                        <a href="${oneDriveLink}" target="_blank" class="btn-small btn-secondary open-onedrive-btn" style="text-decoration: none; background-color: #0078D4;" title="Mở thư mục chứa file trên OneDrive">
+                        <a href="${oneDriveLink}" target="_blank" class="btn-small btn-secondary open-onedrive-btn" style="text-decoration: none; background-color: #0078D4; color: white;" title="Mở thư mục chứa file trên OneDrive">
                             <i class="fas fa-folder-open"></i> Edit Online
                         </a>
                         <button class="btn-small btn-secondary" onclick="copyToClipboard('${networkPath.replace(/\\/g, '\\\\')}')" title="Sao chép đường dẫn mạng để sửa file">

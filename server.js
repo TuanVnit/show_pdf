@@ -9,9 +9,16 @@ const fs = require('fs');
 const cors = require('cors');
 const iconv = require('iconv-lite');
 const jschardet = require('jschardet');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = 8081;
+
+// Cache Configuration for Excel Rendering
+const CACHE_DIR = path.join('uploads', '.cache');
+if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+}
 
 // Middleware
 app.use(cors());
@@ -362,24 +369,37 @@ app.get(/^\/api\/excel-render\/([^\/]+)\/(.+)$/, async (req, res) => {
         const filePath = req.params[1];
         const fullPath = path.join('uploads', extractPath, filePath);
 
-        if (!fs.existsSync(fullPath)) {
-            return res.status(404).json({ error: 'File không tồn tại' });
+        const stats = fs.statSync(fullPath);
+        const cacheKey = crypto.createHash('md5').update(`${fullPath}_${stats.mtimeMs}`).digest('hex');
+        const cacheFile = path.join(CACHE_DIR, `${cacheKey}.json`);
+
+        // Check if cache exists
+        if (fs.existsSync(cacheFile)) {
+            try {
+                const cachedData = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+                console.log(`[Cache Hit] Serving Excel: ${filePath}`);
+                return res.json({
+                    success: true,
+                    ...cachedData,
+                    fromCache: true
+                });
+            } catch (e) {
+                console.error('Error reading cache file:', e);
+                // Continue to render if cache is broken
+            }
         }
 
+        console.log(`[Cache Miss] Rendering Excel: ${filePath}`);
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.readFile(fullPath);
 
         const worksheet = workbook.worksheets[0]; // Get first sheet
 
         // Calculate relative base path for images
-        // filePath e.g., "2/tables/BODY_T2.xlsx" -> we need "2"
-        // If it's at root "tables/file.xlsx" -> we need ""
         let relativeBase = '';
-        const parts = filePath.split('/'); // Assuming forward slashes from URL
+        const parts = filePath.split('/');
         if (parts.length > 0) {
-            // Remove filename
             parts.pop();
-            // Check if inside "tables" folder, go up one more
             if (parts.length > 0 && parts[parts.length - 1].toLowerCase() === 'tables') {
                 parts.pop();
             }
@@ -388,12 +408,22 @@ app.get(/^\/api\/excel-render\/([^\/]+)\/(.+)$/, async (req, res) => {
 
         const htmlTable = convertWorksheetToStyledHTML(worksheet, extractPath, relativeBase);
 
-        res.json({
-            success: true,
+        const resultData = {
             html: htmlTable,
             sheetName: worksheet.name,
             rowCount: worksheet.rowCount,
             columnCount: worksheet.columnCount
+        };
+
+        // Save to cache asynchronously to not block response
+        fs.writeFile(cacheFile, JSON.stringify(resultData), (err) => {
+            if (err) console.error('Error saving cache file:', err);
+            else console.log(`[Cache Saved] ${filePath}`);
+        });
+
+        res.json({
+            success: true,
+            ...resultData
         });
     } catch (error) {
         console.error('Error rendering Excel:', error);

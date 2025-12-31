@@ -308,6 +308,11 @@ async function loadExtractionData(id, initialPage = null) {
                 // 2. Images
                 if (page.images) {
                     page.images.forEach((img, idx) => {
+                        // Skip images starting with 't' (case-insensitive) as per user request
+                        if (img.filename && img.filename.toLowerCase().startsWith('t')) {
+                            return;
+                        }
+
                         sourceItems.push({
                             id: `img_${pageNum}_${idx}`,
                             type: 'image',
