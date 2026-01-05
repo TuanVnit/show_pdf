@@ -335,6 +335,9 @@ function renderImages(images, extractPath) {
                     <button class="btn-icon-small" onclick="triggerMultiUpload('${extractPath}', '${imageFolder}')" title="Upload Multiple Images">
                         <i class="fas fa-upload"></i>
                     </button>
+                    <button class="btn-icon-small btn-delete-small" onclick="deleteCategoryFolder('${extractPath}', '${imageFolder}')" title="Delete All Images">
+                        <i class="fas fa-trash"></i>
+                    </button>
                 </div>
                 <i class="fas fa-chevron-down toggle-icon"></i>
             </h3>
@@ -352,6 +355,9 @@ function renderImages(images, extractPath) {
                                 </button>
                                 <button class="btn-icon-small" style="color:#ecf0f1; padding:0; background:none; border:none; cursor:pointer;" onclick="triggerFileUpload('${extractPath}', '${img.path}', '${img.filename}')" title="Replace">
                                     <i class="fas fa-upload" style="font-size:0.9em;"></i>
+                                </button>
+                                <button class="btn-icon-small delete-btn-sync" style="color:#ecf0f1; padding:0; background:none; border:none; cursor:pointer;" onclick="deleteExtractionFile('${extractPath}', '${img.path}', '${img.filename}')" title="Delete">
+                                    <i class="fas fa-trash-alt" style="font-size:0.9em;"></i>
                                 </button>
                             </div>
                         </div>
@@ -506,6 +512,9 @@ function renderTables(tables, extractPath) {
                     <button class="btn-icon-small" onclick="triggerMultiUpload('${extractPath}', '${tableFolder}')" title="Upload Multiple Tables">
                         <i class="fas fa-upload"></i>
                     </button>
+                    <button class="btn-icon-small btn-delete-small" onclick="deleteCategoryFolder('${extractPath}', '${tableFolder}')" title="Delete All Tables">
+                        <i class="fas fa-trash"></i>
+                    </button>
                 </div>
                 <i class="fas fa-chevron-down toggle-icon"></i>
             </h3>
@@ -523,6 +532,9 @@ function renderTables(tables, extractPath) {
                                 </button>
                                 <button class="btn-small btn-primary" onclick="triggerFileUpload('${extractPath}', '${table.path}', '${table.filename}')" title="Upload đè file">
                                     <i class="fas fa-upload"></i> Up
+                                </button>
+                                <button class="btn-small btn-secondary delete-btn-sync" onclick="deleteExtractionFile('${extractPath}', '${table.path}', '${table.filename}')" title="Xóa file này">
+                                    <i class="fas fa-trash"></i>
                                 </button>
                             </div>
                         </div>
@@ -734,6 +746,9 @@ function renderText(text, extractPath, textFile) {
                     <button class="btn-icon-small" onclick="triggerMultiUpload('${extractPath}', '${textFolder}')" title="Upload Multiple Text Files">
                         <i class="fas fa-upload"></i>
                     </button>
+                    <button class="btn-icon-small btn-delete-small" onclick="deleteCategoryFolder('${extractPath}', '${textFolder}')" title="Delete All Text Files">
+                        <i class="fas fa-trash"></i>
+                    </button>
                 </div>
                 <i class="fas fa-chevron-down toggle-icon"></i>
             </h3>
@@ -751,6 +766,9 @@ function renderText(text, extractPath, textFile) {
                             </button>
                             <button class="btn-small btn-download" onclick="downloadFile('/uploads/${extractPath}/${textFile.path}', '${textFile.filename}')" title="Download text gốc">
                                 <i class="fas fa-download"></i> Down
+                            </button>
+                            <button class="btn-small btn-secondary delete-btn-sync" onclick="deleteExtractionFile('${extractPath}', '${textFile.path}', '${textFile.filename}')" title="Xóa file text này">
+                                <i class="fas fa-trash"></i>
                             </button>
                             ` : ''}
                             <button class="btn-small btn-copy" onclick="copyText(\`${text.replace(/`/g, '\\`')}\`)">
@@ -828,6 +846,61 @@ async function deleteExtraction(id) {
         }
     } catch (error) {
         alert('Lỗi xóa extraction');
+    }
+}
+
+// Delete a specific file from extraction
+async function deleteExtractionFile(extractId, filePath, filename) {
+    if (!confirm(`Bạn có chắc muốn xóa file "${filename}"? Hành động này không thể hoàn tác.`)) return;
+
+    try {
+        const response = await fetch('/api/delete-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ extractId, filePath })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            // Reload the page content to update UI
+            // Find current page info from sidebar
+            const activePageItem = document.querySelector('.page-item-tree.active');
+            if (activePageItem) {
+                activePageItem.click(); // Trigger reload
+            }
+        } else {
+            alert('Lỗi xóa file: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Delete error:', error);
+        alert('Lỗi kết nối khi xóa file');
+    }
+}
+
+// Update a specific file from extraction (already added above)
+
+// Delete an entire category folder content
+async function deleteCategoryFolder(extractId, folderName) {
+    if (!confirm(`CẢNH BÁO: Bạn có chắc muốn XÓA TẤT CẢ mục trong thư mục "${folderName}"? Hành động này không thể hoàn tác.`)) return;
+    if (!confirm('Xác nhận lần cuối: Xóa toàn bộ?')) return;
+
+    try {
+        const response = await fetch('/api/delete-folder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ extractId, folderName })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            const activePageItem = document.querySelector('.page-item-tree.active');
+            if (activePageItem) activePageItem.click();
+        } else {
+            alert('Lỗi xóa thư mục: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Delete folder error:', error);
+        alert('Lỗi kết nối khi xóa thư mục');
     }
 }
 

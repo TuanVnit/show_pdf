@@ -284,14 +284,13 @@ body.sidebar-collapsed .sidebar-tree {
 }
 
 .btn-delete-small:hover {
-    background-color: #fee2e2;
-    color: var(--danger-color);
+    background-color: #eee;
+    color: var(--primary-color);
 }
 
-.btn-delete-small i,
-.fa-trash,
-.fa-trash-can {
-    color: var(--danger-color) !important;
+/* Global trash color removed to allow sync with other buttons */
+.btn-delete-small:hover {
+    color: var(--danger-color);
 }
 
 .extraction-pages {

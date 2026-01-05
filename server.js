@@ -241,6 +241,60 @@ app.delete('/api/extraction/:id', (req, res) => {
     }
 });
 
+// API: Delete specific file
+app.post('/api/delete-file', express.json(), (req, res) => {
+    try {
+        const { extractId, filePath } = req.body;
+        if (!extractId || !filePath) return res.status(400).json({ error: 'Missing parameters' });
+
+        const fullPath = path.join(__dirname, 'uploads', extractId, filePath);
+
+        // Security check: ensure path is within uploads
+        const relative = path.relative(path.join(__dirname, 'uploads'), fullPath);
+        if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) {
+            if (fs.existsSync(fullPath)) {
+                fs.unlinkSync(fullPath);
+                res.json({ success: true, message: 'Đã xóa file' });
+            } else {
+                res.status(404).json({ error: 'File not found' });
+            }
+        } else {
+            res.status(403).json({ error: 'Unauthorized path' });
+        }
+    } catch (error) {
+        console.error('Error deleting file:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API: Delete specific folder (Category)
+app.post('/api/delete-folder', express.json(), (req, res) => {
+    try {
+        const { extractId, folderName } = req.body;
+        if (!extractId || !folderName) return res.status(400).json({ error: 'Missing parameters' });
+
+        const fullPath = path.join(__dirname, 'uploads', extractId, folderName);
+
+        // Security check
+        const relative = path.relative(path.join(__dirname, 'uploads'), fullPath);
+        if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) {
+            if (fs.existsSync(fullPath)) {
+                fs.rmSync(fullPath, { recursive: true, force: true });
+                // Recreate the empty folder to keep structure
+                fs.mkdirSync(fullPath, { recursive: true });
+                res.json({ success: true, message: 'Đã xóa nội dung thư mục' });
+            } else {
+                res.status(404).json({ error: 'Folder not found' });
+            }
+        } else {
+            res.status(403).json({ error: 'Unauthorized path' });
+        }
+    } catch (error) {
+        console.error('Error deleting folder:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // API: Get file content - using regex for flexible path matching
 app.get(/^\/api\/file\/([^\/]+)\/(.+)$/, (req, res) => {
     try {
