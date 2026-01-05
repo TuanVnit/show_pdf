@@ -2,12 +2,14 @@
 var groupExtractionId = null;
 
 let sourceItems = [];
-let groups = [];
+let groups = []; // stores [{ name, page, subGroups: [...] }]
+let pendingSubGroups = []; // stores [{ tag, items }]
 let groupedItemIds = new Set(); // Track items already in groups
 let availablePages = new Set();
 var selectedPage = null;
 let editingGroupIndex = -1; // Track active editing group
-let expandedGroupIndices = new Set(); // Track expanded groups
+let expandedGroupIndices = new Set(); // Track expanded groups (for master groups)
+let expandedPending = true; // Track draft expansion
 let currentExtractionData = null; // Store full API response
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -54,46 +56,19 @@ function loadTags() {
     if (!list) return;
     list.innerHTML = '';
 
-    // Use window.currentTags instead of GROUP_TAGS
+    // Use window.currentTags
     const tags = window.currentTags || [];
 
     tags.forEach((tag, index) => {
-        const label = document.createElement('label');
-        label.className = 'tag-radio-label';
-        label.style.backgroundColor = tag.color;
+        const btn = document.createElement('button');
+        btn.className = 'tag-btn';
+        btn.style.backgroundColor = tag.color;
+        btn.innerHTML = `<i class="fas fa-tag"></i> ${tag.label}`;
+        btn.title = `Gom nhóm dữ liệu vào: ${tag.label}`;
 
-        // Input
-        const input = document.createElement('input');
-        input.type = 'radio';
-        input.name = 'selectedTag';
-        input.value = tag.id;
+        btn.onclick = () => moveToGroup(tag.id);
 
-        // Icon Indicator
-        const icon = document.createElement('i');
-        icon.className = 'fas fa-check tag-check-icon';
-        icon.style.marginRight = '6px';
-        icon.style.fontSize = '1.1em';
-        // Check initial state
-        if (index === 0) {
-            label.classList.add('selected');
-            input.checked = true;
-            icon.style.display = 'inline-block';
-        } else {
-            icon.style.display = 'none';
-        }
-
-        input.addEventListener('change', () => {
-            document.querySelectorAll('.tag-radio-label').forEach(l => l.classList.remove('selected'));
-            document.querySelectorAll('.tag-check-icon').forEach(i => i.style.display = 'none');
-
-            label.classList.add('selected');
-            icon.style.display = 'inline-block';
-        });
-
-        label.appendChild(input);
-        label.appendChild(icon); // Prepend icon
-        label.appendChild(document.createTextNode(tag.label));
-        list.appendChild(label);
+        list.appendChild(btn);
     });
 }
 // Tag Manager Functions
@@ -106,72 +81,134 @@ function closeTagManager() {
 }
 function renderTagManagerList() {
     const tbody = document.querySelector('#tagManagerList tbody');
+    if (!tbody) return;
     tbody.innerHTML = '';
-    (window.currentTags || []).forEach((tag, idx) => {
-        tbody.innerHTML += `
-            <tr>
-                <td><input type="text" value="${tag.label}" onchange="window.currentTags[${idx}].label=this.value; loadTags();" class="tag-edit-input"></td>
-                <td><input type="color" value="${tag.color}" onchange="window.currentTags[${idx}].color=this.value; loadTags();" class="color-input"></td>
-                <td style="text-align:center;">
-                    <button onclick="deleteTag(${idx})" class="btn-delete-tag" title="Delete Tag">
-                        <i class="fas fa-trash-can"></i>
-                    </button>
-                </td>
-            </tr>
-        `;
+
+    const tags = window.currentTags || [];
+    tags.forEach((tag, idx) => {
+        const tr = document.createElement('tr');
+
+        // Label Input Column
+        const tdLabel = document.createElement('td');
+        const inputLabel = document.createElement('input');
+        inputLabel.type = 'text';
+        inputLabel.value = tag.label;
+        inputLabel.className = 'tag-edit-input';
+        inputLabel.onchange = (e) => {
+            const newLabel = e.target.value.trim();
+            if (!newLabel) return;
+            window.currentTags[idx].label = newLabel;
+            // Update ID if it's a generic one
+            if (window.currentTags[idx].id === tag.label.toLowerCase().replace(/\s+/g, '_')) {
+                window.currentTags[idx].id = newLabel.toLowerCase().replace(/\s+/g, '_');
+            }
+            loadTags();
+        };
+        tdLabel.appendChild(inputLabel);
+
+        // Color Input Column
+        const tdColor = document.createElement('td');
+        const inputColor = document.createElement('input');
+        inputColor.type = 'color';
+        inputColor.value = tag.color;
+        inputColor.className = 'color-input';
+        inputColor.onchange = (e) => {
+            window.currentTags[idx].color = e.target.value;
+            loadTags();
+        };
+        tdColor.appendChild(inputColor);
+
+        // Action Column
+        const tdAction = document.createElement('td');
+        tdAction.style.textAlign = 'center';
+        const btnDelete = document.createElement('button');
+        btnDelete.className = 'btn-delete-tag';
+        btnDelete.title = 'Xóa Tag';
+        btnDelete.innerHTML = '<i class="fas fa-trash"></i>';
+        btnDelete.onclick = () => deleteTag(idx);
+        tdAction.appendChild(btnDelete);
+
+        tr.appendChild(tdLabel);
+        tr.appendChild(tdColor);
+        tr.appendChild(tdAction);
+        tbody.appendChild(tr);
     });
 }
 function addNewTag() {
-    const label = document.getElementById('newTagName').value.trim();
-    const color = document.getElementById('newTagColor').value;
-    if (!label) return alert('Enter Tag Name');
+    const labelInput = document.getElementById('newTagName');
+    const colorInput = document.getElementById('newTagColor');
+    const label = labelInput.value.trim();
+    const color = colorInput.value;
+
+    if (!label) return alert('Vui lòng nhập tên Tag');
 
     const id = label.toLowerCase().replace(/\s+/g, '_');
+
+    // Check for duplicate ID
+    if (window.currentTags.some(t => t.id === id)) {
+        return alert('Tag này đã tồn tại!');
+    }
+
     window.currentTags.push({ id, label, color });
-    document.getElementById('newTagName').value = '';
+    labelInput.value = '';
     renderTagManagerList();
     loadTags();
 }
+
 function deleteTag(index) {
-    if (!confirm('Delete this tag?')) return;
+    const tag = window.currentTags[index];
+    if (!tag) return;
+
+    if (!confirm(`Bạn có chắc chắn muốn xóa tag "${tag.label}" không?`)) return;
+
     window.currentTags.splice(index, 1);
+    console.log('Tag deleted at index:', index);
+
     renderTagManagerList();
     loadTags();
 }
+
 async function saveTagsToServer() {
     try {
-        await fetch('/api/save-tags', {
+        const response = await fetch('/api/save-tags', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tags: window.currentTags })
         });
-        alert('Tags Saved!');
-        closeTagManager();
-        renderGroupList(); // Re-render groups to reflect color/name changes
+        const res = await response.json();
+        if (res.success) {
+            alert('Đã lưu các thay đổi!');
+            closeTagManager();
+            renderGroupList(); // Re-render groups to reflect color/name changes
+        } else {
+            alert('Lỗi khi lưu: ' + (res.error || 'Unknown error'));
+        }
     } catch (e) {
-        alert('Error saving tags');
+        console.error('Error saving tags:', e);
+        alert('Lỗi kết nối server khi lưu tag');
     }
 }
 
-// Action: Move Selected to New Group
-function moveToGroup() {
+// Action: Move Selected to New Group (into Pending)
+function moveToGroup(tagId = null) {
     if (!selectedPage) return;
 
     // Find selected inputs in source list
     const inputs = document.querySelectorAll('#sourceList .item-checkbox:checked');
-    if (inputs.length === 0) return alert('Chọn ít nhất 1 item để group');
+    if (inputs.length === 0) return alert('Vui lòng chọn ít nhất 1 mục để gom nhóm');
 
     const selectedIds = Array.from(inputs).map(i => i.value);
     const selectedItems = sourceItems.filter(i => selectedIds.includes(i.id));
 
-    // Get selected tag from Radio
-    const radio = document.querySelector('input[name="selectedTag"]:checked');
-    const tag = radio ? radio.value : 'note'; // default fallback
+    // Determine tag
+    let tag = tagId;
+    if (!tag) {
+        tag = 'note';
+    }
 
-    // Create group
-    groups.push({
+    // Create a sub-group in pending
+    pendingSubGroups.push({
         tag: tag,
-        page: selectedPage, // Important: Bind group to page
         items: selectedItems
     });
 
@@ -179,6 +216,74 @@ function moveToGroup() {
     selectedIds.forEach(id => groupedItemIds.add(id));
 
     // Re-render
+    renderSourceList();
+    renderGroupList();
+
+    // Show Save button
+    const saveBtn = document.getElementById('saveGroupBtn');
+    if (saveBtn) saveBtn.style.display = 'flex';
+}
+
+// Naming Modal Functions
+function openNamingModal() {
+    if (pendingSubGroups.length === 0) return alert('Chưa có mục nào được gán tag!');
+
+    // Count groups on this page to suggest "Group N+1"
+    const currentPageGroups = groups.filter(g => String(g.page) === String(selectedPage));
+    const nextNum = currentPageGroups.length + 1;
+    const defaultName = `Group ${nextNum}`;
+
+    const modal = document.getElementById('groupNamingModal');
+    const input = document.getElementById('groupNameInput');
+
+    if (modal && input) {
+        modal.style.display = 'flex';
+        input.value = defaultName;
+
+        // Auto-select for easy overwriting
+        setTimeout(() => {
+            input.focus();
+            input.select();
+        }, 30);
+    }
+}
+
+function closeNamingModal() {
+    document.getElementById('groupNamingModal').style.display = 'none';
+}
+
+function confirmSaveGroup() {
+    const nameInput = document.getElementById('groupNameInput');
+    const name = nameInput.value.trim();
+    if (!name) return alert('Vui lòng nhập tên nhóm!');
+
+    // Create master group
+    groups.push({
+        name: name,
+        page: selectedPage,
+        subGroups: [...pendingSubGroups]
+    });
+
+    // Clear pending
+    pendingSubGroups = [];
+
+    // Hide save button
+    const saveBtn = document.getElementById('saveGroupBtn');
+    if (saveBtn) saveBtn.style.display = 'none';
+
+    closeNamingModal();
+    renderGroupList();
+    saveGroups(); // Persist to server
+}
+
+function cancelPending() {
+    if (!confirm('Hủy bỏ các thay đổi chưa lưu?')) return;
+    pendingSubGroups.forEach(sg => {
+        sg.items.forEach(item => groupedItemIds.delete(item.id));
+    });
+    pendingSubGroups = [];
+    const saveBtn = document.getElementById('saveGroupBtn');
+    if (saveBtn) saveBtn.style.display = 'none';
     renderSourceList();
     renderGroupList();
 }
@@ -308,11 +413,6 @@ async function loadExtractionData(id, initialPage = null) {
                 // 2. Images
                 if (page.images) {
                     page.images.forEach((img, idx) => {
-                        // Skip images starting with 't' (case-insensitive) as per user request
-                        if (img.filename && img.filename.toLowerCase().startsWith('t')) {
-                            return;
-                        }
-
                         sourceItems.push({
                             id: `img_${pageNum}_${idx}`,
                             type: 'image',
@@ -347,15 +447,23 @@ async function loadExtractionData(id, initialPage = null) {
 
         // Load existing saved groups if any
         if (data.groups && Array.isArray(data.groups)) {
-            groups = data.groups;
-            groups.forEach(g => {
-                if (g.items) {
-                    g.items.forEach(i => groupedItemIds.add(i.id));
-                    // Check if group has a page property, if not try to infer from first item
-                    if (!g.page && g.items.length > 0) {
-                        g.page = g.items[0].page;
-                    }
-                }
+            // Migration/Normalization: Handle old flat array if found
+            groups = data.groups.map(g => {
+                if (g.subGroups) return g; // Already new structure
+                // Convert old flat group to a master group with 1 subgroup
+                const tagInfo = (window.currentTags || GROUP_TAGS).find(t => t.id === g.tag) || { label: 'Old Group' };
+                return {
+                    name: `Group-${tagInfo.label}`,
+                    page: g.page,
+                    subGroups: [{ tag: g.tag, items: g.items }]
+                };
+            });
+
+            // Track IDs
+            groups.forEach(mg => {
+                mg.subGroups.forEach(sg => {
+                    sg.items.forEach(i => groupedItemIds.add(i.id));
+                });
             });
         }
 
@@ -617,89 +725,147 @@ function updatePdfDisplay() {
 }
 
 // Updated renderGroupList for Delete Item and Add Actions
+// Updated renderGroupList for Master-SubGroup Structure
 function renderGroupList() {
     const list = document.getElementById('groupList');
+    if (!list) return;
     list.innerHTML = '';
 
-    // Filter groups by selected page
-    const visibleGroups = groups.filter(g => String(g.page) === String(selectedPage));
+    const currentTags = window.currentTags || GROUP_TAGS;
 
-    visibleGroups.forEach((group) => {
-        const actualIndex = groups.indexOf(group);
-        const isEditing = (actualIndex === editingGroupIndex);
-        let isExpanded = expandedGroupIndices.has(actualIndex);
-        if (isEditing) isExpanded = true;
+    // 1. Render PENDING (DRAFT) Groups
+    if (pendingSubGroups.length > 0) {
+        const draftDiv = document.createElement('div');
+        draftDiv.className = 'master-group-panel';
+        draftDiv.style.border = '2px dashed #10b981';
 
-        const card = document.createElement('div');
-        card.className = 'group-card';
-        if (isEditing) card.style.border = '2px solid #3498db';
-
-        const currentTags = window.currentTags || GROUP_TAGS;
-        const tagInfo = currentTags.find(t => t.id === group.tag) || currentTags[0];
-        const tagStyle = `background: ${tagInfo.color}`;
-
-        // Header Actions - Keep Edit/Delete Group
-        let actionButtons = `
-            <button class="btn-icon-small" onclick="toggleEditGroup(${actualIndex})" title="${isEditing ? 'Done Sorting' : 'Sort Items'}">
-                <i class="fas ${isEditing ? 'fa-check' : 'fa-sort'}"></i>
-            </button>
-            <button class="btn-icon-small" onclick="removeGroup(${actualIndex})" title="Delete Group">
-                <i class="fas fa-trash"></i>
-            </button>
-        `;
-
-        card.innerHTML = `
-            <div class="group-header" onclick="toggleGroupCollapse(${actualIndex})" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; padding: 5px 0;">
-                <div style="display:flex; align-items:center; gap: 8px;">
-                    <i class="fas fa-chevron-${isExpanded ? 'down' : 'right'}" style="width: 15px; color:#555;"></i>
-                    <span class="group-tag" style="${tagStyle}">${tagInfo.label}</span>
-                    <span style="font-size: 0.8em; color: #888;">(${group.items.length})</span>
-                </div>
-                <div class="group-actions" onclick="event.stopPropagation()" style="display: flex; gap: 5px;">
-                    ${actionButtons}
+        draftDiv.innerHTML = `
+            <div class="master-group-header" style="background:#ecfdf5; color:#059669;">
+                <span><i class="fas fa-edit"></i> Đang chọn (${pendingSubGroups.length} tag)</span>
+                <button class="btn-icon-small" onclick="cancelPending()" title="Hủy bỏ" style="color:#ef4444;"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="master-group-content">
+                ${pendingSubGroups.map((sg, idx) => {
+            const tagInfo = currentTags.find(t => t.id === sg.tag) || currentTags[0];
+            return `
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; padding:8px; background:#f9fafb; border-radius:8px; border-left: 5px solid ${tagInfo.color}">
+                            <span style="font-weight:700; font-size:0.85rem;">${tagInfo.label} (${sg.items.length})</span>
+                            <button class="btn-icon-small" onclick="removePendingSubGroup(${idx})" style="color:#94a3b8;"><i class="fas fa-minus-circle"></i></button>
+                        </div>
+                    `;
+        }).join('')}
+                <div style="margin-top:10px; color:#64748b; font-size:0.8rem; text-align:center;">
+                    Nhấn "Save as Group" ở cột giữa để đặt tên và lưu.
                 </div>
             </div>
-            
-            <div class="group-items" id="group-items-${actualIndex}" style="display: ${isExpanded ? 'block' : 'none'};">
-                ${group.items.map((item, idx) => `
-                    <div class="groupable-item group-member-item" style="background: #f9f9f9; padding: 5px; display: block; position: relative;">
-                         <button class="btn-delete-item" onclick="removeItemFromGroup(${actualIndex}, ${idx})" title="Remove item" 
-                                 style="position:absolute; right:2px; top:2px; padding:2px 6px; border:none; background:rgba(255,255,255,0.9); border-radius:4px; color:#e74c3c; cursor:pointer; z-index:10;">
-                            <i class="fas fa-times"></i>
-                         </button>
-                         
-                         <div style="display:flex; align-items:center; gap: 5px; margin-bottom: 5px; padding-right: 20px;">
-                            <div class="item-type-icon">${getItemIcon(item.type)}</div>
-                            <span style="font-size: 0.8em; font-weight: bold;">${item.type}</span>
-                         </div>
-                         ${item.type === 'image' ? `<div style="text-align:center"><img src="${item.src}" class="preview-img-small" style="max-height: 60px; width: auto;"></div>` : ''}
-                         <div class="item-content" style="font-size:0.85em; margin-top:2px;">${item.content}</div>
-                    </div>
-                `).join('')}
+        `;
+        list.appendChild(draftDiv);
+    }
+
+    // 2. Render SAVED MASTER Groups
+    const visibleMasterGroups = groups.filter(mg => String(mg.page) === String(selectedPage));
+
+    if (visibleMasterGroups.length === 0 && pendingSubGroups.length === 0) {
+        list.innerHTML = '<div style="text-align:center; padding:40px; color:#94a3b8; font-style:italic;">Chưa có nhóm nào...</div>';
+    }
+
+    visibleMasterGroups.forEach((mg) => {
+        const actualIndex = groups.indexOf(mg);
+        const isExpanded = expandedGroupIndices.has(actualIndex);
+
+        const panel = document.createElement('div');
+        panel.className = 'master-group-panel';
+
+        panel.innerHTML = `
+            <div class="master-group-header" onclick="toggleMasterGroup(${actualIndex})">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <i class="fas fa-chevron-${isExpanded ? 'down' : 'right'}"></i>
+                    <span>${mg.name}</span>
+                </div>
+                <div class="group-actions" onclick="event.stopPropagation()">
+                    <button class="btn-icon-small" onclick="removeMasterGroup(${actualIndex})" title="Xóa toàn bộ nhóm" style="color:#ef4444;"><i class="fas fa-trash"></i></button>
+                </div>
             </div>
-            
-            <!-- Group Footer: Always show Add Button if expanded -->
-            <div style="display: ${isExpanded ? 'flex' : 'none'}; padding: 10px; border-top: 1px solid #eee; justify-content: center; gap: 10px; background: #fafafa;">
-                <button class="btn-small btn-secondary" onclick="addSelectedToTargetGroup(${actualIndex})" style="font-size:0.8rem; flex:1;">
-                    <i class="fas fa-plus"></i> Add Selected Items
-                </button>
+            <div class="master-group-content" style="display: ${isExpanded ? 'block' : 'none'};">
+                ${mg.subGroups.map((sg, sgIdx) => {
+            const tagInfo = currentTags.find(t => t.id === sg.tag) || currentTags[0];
+            return `
+                        <div class="subgroup-container" style="margin-bottom:12px; border-left: 4px solid ${tagInfo.color}; padding-left:12px; background:#fcfcfc; border-radius:0 6px 6px 0; padding-top:4px; padding-bottom:4px;">
+                            <div style="font-weight:800; font-size:0.7rem; color:#94a3b8; margin-bottom:6px; display:flex; justify-content:space-between; text-transform:uppercase; letter-spacing:0.05em;">
+                                <span>${tagInfo.label}</span>
+                                <span>${sg.items.length} items</span>
+                            </div>
+                            <div class="subgroup-items">
+                                ${sg.items.map((item, iIdx) => `
+                                    <div class="groupable-item group-member-item" style="padding:6px; font-size:0.85rem; border:1px solid #edf2f7; margin-bottom:4px; display:flex; align-items:center; gap:8px; background:white; border-radius:4px;">
+                                        <div style="width:24px; text-align:center; color:#94a3b8;">${getItemIcon(item.type)}</div>
+                                        <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#334155;">${item.content}</div>
+                                        <button onclick="removeItemFromMaster(${actualIndex}, ${sgIdx}, ${iIdx})" style="border:none; background:none; color:#cbd5e1; cursor:pointer; padding:4px;" title="Xóa mục"><i class="fas fa-times"></i></button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+        }).join('')}
             </div>
         `;
-        list.appendChild(card);
-        // Init Sortable if editing
-        if (isEditing) {
-            const container = card.querySelector('.group-items');
-            new Sortable(container, {
-                animation: 150,
-                ghostClass: 'sortable-ghost',
-                onEnd: function (evt) {
-                    // Reorder logic: array move
-                    const item = groups[actualIndex].items.splice(evt.oldIndex, 1)[0];
-                    groups[actualIndex].items.splice(evt.newIndex, 0, item);
-                }
-            });
-        }
+        list.appendChild(panel);
     });
+}
+
+function toggleMasterGroup(index) {
+    if (expandedGroupIndices.has(index)) expandedGroupIndices.delete(index);
+    else expandedGroupIndices.add(index);
+    renderGroupList();
+}
+
+function removeMasterGroup(index) {
+    if (!confirm('Bạn có chắc chắn muốn xóa toàn bộ nhóm này và đưa các mục về danh sách nguồn?')) return;
+    const mg = groups[index];
+    mg.subGroups.forEach(sg => {
+        sg.items.forEach(item => groupedItemIds.delete(item.id));
+    });
+    groups.splice(index, 1);
+    renderSourceList();
+    renderGroupList();
+    saveGroups();
+}
+
+function removePendingSubGroup(idx) {
+    const sg = pendingSubGroups[idx];
+    sg.items.forEach(item => groupedItemIds.delete(item.id));
+    pendingSubGroups.splice(idx, 1);
+
+    if (pendingSubGroups.length === 0) {
+        document.getElementById('saveGroupBtn').style.display = 'none';
+    }
+    renderSourceList();
+    renderGroupList();
+}
+
+function removeItemFromMaster(mgIndex, sgIndex, itemIndex) {
+    const mg = groups[mgIndex];
+    if (!mg || !mg.subGroups[sgIndex]) return;
+
+    const i = mg.subGroups[sgIndex].items[itemIndex];
+    if (!i) return;
+
+    groupedItemIds.delete(i.id);
+    mg.subGroups[sgIndex].items.splice(itemIndex, 1);
+
+    // Cleanup empty sub-groups
+    if (mg.subGroups[sgIndex].items.length === 0) {
+        mg.subGroups.splice(sgIndex, 1);
+    }
+
+    // Cleanup empty master groups
+    if (mg.subGroups.length === 0) {
+        groups.splice(mgIndex, 1);
+    }
+
+    renderSourceList();
+    renderGroupList();
+    saveGroups();
 }
 
 function getItemIcon(type) {
@@ -708,42 +874,27 @@ function getItemIcon(type) {
     return '<i class="fas fa-table"></i>';
 }
 
-// (Old moveToGroup removed)
-
-// Action: Remove Group (Ungroup)
+// Action: Remove Group (Ungroup) - Legacy for safety
 function removeGroup(index) {
-    const group = groups[index];
-    // Return items to source
-    group.items.forEach(item => groupedItemIds.delete(item.id));
-
-    groups.splice(index, 1);
-
-    renderSourceList();
-    renderGroupList();
+    removeMasterGroup(index);
 }
 
 // Save Groups to Backend
 async function saveGroups() {
-    if (!currentExtraction) return alert('Chưa chọn extraction');
-    if (groups.length === 0) return alert('Chưa có nhóm nào');
+    if (!groupExtractionId) return;
 
     try {
         const response = await fetch('/api/save-groups', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                extractPath: currentExtraction,
+                extractPath: groupExtractionId,
                 groups: groups
             })
         });
         const res = await response.json();
-        if (res.success) {
-            alert('Lưu thành công!');
-        } else {
-            alert('Lỗi: ' + res.error);
-        }
+        console.log('Save Result:', res);
     } catch (e) {
-        console.error(e);
-        alert('Lỗi kết nối server');
+        console.error('Save Error:', e);
     }
 }

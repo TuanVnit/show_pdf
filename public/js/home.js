@@ -163,17 +163,12 @@ async function loadExtractionPages(extractionId) {
 // Load content for a specific page
 async function loadPageContent(extractionId, pageNumber, pageIndex) {
     try {
-        currentPage = pageNumber;
-
-        // Maintain current tab if it's Group Data, otherwise switch to View PDF
+        // Switch to View PDF tab automatically when a page is selected
         if (typeof switchTab === 'function') {
-            const groupTabBtn = document.getElementById('tab-group-data-btn');
-            if (groupTabBtn && groupTabBtn.classList.contains('active')) {
-                switchTab('group-data');
-            } else {
-                switchTab('view-pdf');
-            }
+            switchTab('view-pdf');
         }
+
+        currentPage = pageNumber;
 
         const response = await fetch(`/api/extraction/${extractionId}`);
         const data = await response.json();
