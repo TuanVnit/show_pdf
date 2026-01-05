@@ -398,12 +398,13 @@ body.sidebar-collapsed .sidebar-tree {
     display: none;
     flex: 1;
     height: 100%;
-    /* Important for internal scrolling */
     position: relative;
+    overflow: hidden;
 }
 
 .tab-content.active {
-    display: block;
+    display: flex;
+    flex-direction: column;
 }
 
 /* ---------------- GROUP DATA LAYOUT (3 columns) ---------------- */
@@ -422,8 +423,13 @@ body.sidebar-collapsed .sidebar-tree {
     border-radius: 8px;
     background: white;
     overflow: hidden;
-    min-width: 0;
-    /* Fix flex overflow */
+    min-width: 350px;
+}
+
+.panel-column.pdf-panel {
+    overflow-x: auto;
+    /* Internal horizontal scroll for PDF only */
+    min-width: 350px;
 }
 
 /* Middle controls column */
@@ -567,6 +573,8 @@ body.sidebar-collapsed .sidebar-tree {
     gap: 20px;
     /* Space between columns */
     padding: 20px;
+    overflow-x: auto;
+    /* Sync with group-container */
 }
 
 /* Left Panel: Results */
@@ -597,7 +605,13 @@ body.sidebar-collapsed .sidebar-tree {
     border: 1px solid var(--border-color);
     overflow: hidden;
     box-shadow: var(--shadow-md);
-    min-width: 300px;
+    min-width: 800px;
+    /* SIMULATION: High min-width to force tab scrollbar */
+}
+
+#pdfContainer {
+    overflow: auto !important;
+    /* Allow internal scrolling if needed */
 }
 
 .pdf-header {
@@ -621,9 +635,16 @@ body.sidebar-collapsed .sidebar-tree {
 .pdf-viewer {
     flex: 1;
     width: 100%;
+    height: 100%;
+    /* Ensure it fills the container */
     border: none;
     background-color: #525659;
     /* PDF viewer bg color */
+    cursor: grab;
+}
+
+.pdf-viewer:active {
+    cursor: grabbing;
 }
 
 /* ---------------- PAGE HEADER CARD ---------------- */

@@ -233,7 +233,18 @@ function renderPageContent(page, extractPath) {
                         <i class="fas fa-external-link-alt"></i> Mở tab mới
                     </a>
                 </div>
-                <iframe src="${pdfUrl}" class="pdf-viewer" title="PDF Viewer"></iframe>
+                <iframe src="/pdfjs/web/viewer.html?file=${encodeURIComponent(pdfUrl)}#handtool=1" 
+                        class="pdf-viewer" 
+                        title="PDF Viewer"
+                        onload="try { 
+                            const app = this.contentWindow.PDFViewerApplication;
+                            if (app) {
+                                app.initializedPromise.then(() => {
+                                    if (app.pdfCursorTools) app.pdfCursorTools.switchTool(1);
+                                });
+                            }
+                        } catch(e) { console.warn('PDF.js cross-origin or loading error', e); }">
+                </iframe>
             </div>
             ` : ''}
         </div>

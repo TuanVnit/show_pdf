@@ -744,16 +744,30 @@ function updatePdfDisplay() {
         }
     }
 
-    if (pdfUrl) {
-        // Only update if changed to avoid flicker, BUT hash change might need update?
-        // If query/hash changes, assigning src works.
-        // decoding URL to check equality
-        // if (decodeURIComponent(pdfViewer.contentWindow.location.href).includes(pdfUrl)) return; 
-        // Security restriction might block contentWindow access if cross origin (unlikely here).
+    const externalBtn = document.getElementById('groupPdfExternalBtn');
 
-        // Simple assignment
-        if (pdfViewer.getAttribute('src') !== pdfUrl) {
-            pdfViewer.src = pdfUrl;
+    if (pdfUrl) {
+        // Construct PDF.js viewer URL
+        // If pdfUrl already contains a hash (like #page=N), we need to split it
+        let baseUrl = pdfUrl;
+        let hashParams = 'handtool=1';
+
+        if (pdfUrl.includes('#')) {
+            const parts = pdfUrl.split('#');
+            baseUrl = parts[0];
+            hashParams = parts[1] + '&' + hashParams;
+        }
+
+        const viewerUrl = `/pdfjs/web/viewer.html?file=${encodeURIComponent(baseUrl)}#${hashParams}`;
+
+        // Update iframe if changed
+        if (pdfViewer.getAttribute('src') !== viewerUrl) {
+            pdfViewer.src = viewerUrl;
+        }
+
+        if (externalBtn) {
+            externalBtn.href = pdfUrl; // Link directly to original PDF file
+            externalBtn.style.display = 'inline-flex';
         }
 
         pdfViewer.style.display = 'block';
@@ -761,6 +775,7 @@ function updatePdfDisplay() {
     } else {
         pdfViewer.style.display = 'none';
         if (noPdfMsg) noPdfMsg.style.display = 'block';
+        if (externalBtn) externalBtn.style.display = 'none';
     }
 }
 
