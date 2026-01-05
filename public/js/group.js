@@ -10,6 +10,7 @@ var selectedPage = null;
 let editingGroupIndex = -1; // Track active editing group
 let expandedGroupIndices = new Set(); // Track expanded groups (for master groups)
 let expandedPending = true; // Track draft expansion
+let renamingMasterIndex = -1; // Track which master group is being renamed
 let currentExtractionData = null; // Store full API response
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -227,6 +228,7 @@ function moveToGroup(tagId = null) {
 // Naming Modal Functions
 function openNamingModal() {
     if (pendingSubGroups.length === 0) return alert('Chưa có mục nào được gán tag!');
+    renamingMasterIndex = -1; // Create mode
 
     // Count groups on this page to suggest "Group N+1"
     const currentPageGroups = groups.filter(g => String(g.page) === String(selectedPage));
@@ -235,8 +237,10 @@ function openNamingModal() {
 
     const modal = document.getElementById('groupNamingModal');
     const input = document.getElementById('groupNameInput');
+    const title = modal ? modal.querySelector('h3') : null;
 
     if (modal && input) {
+        if (title) title.innerHTML = '<i class="fas fa-folder-plus"></i> Đặt tên Nhóm';
         modal.style.display = 'flex';
         input.value = defaultName;
 
@@ -248,8 +252,30 @@ function openNamingModal() {
     }
 }
 
+function openRenameModal(index) {
+    renamingMasterIndex = index;
+    const group = groups[index];
+    if (!group) return;
+
+    const modal = document.getElementById('groupNamingModal');
+    const input = document.getElementById('groupNameInput');
+    const title = modal ? modal.querySelector('h3') : null;
+
+    if (modal && input) {
+        if (title) title.innerHTML = '<i class="fas fa-edit"></i> Đổi tên Nhóm';
+        modal.style.display = 'flex';
+        input.value = group.name;
+
+        setTimeout(() => {
+            input.focus();
+            input.select();
+        }, 30);
+    }
+}
+
 function closeNamingModal() {
     document.getElementById('groupNamingModal').style.display = 'none';
+    renamingMasterIndex = -1;
 }
 
 function confirmSaveGroup() {
@@ -257,19 +283,25 @@ function confirmSaveGroup() {
     const name = nameInput.value.trim();
     if (!name) return alert('Vui lòng nhập tên nhóm!');
 
-    // Create master group
-    groups.push({
-        name: name,
-        page: selectedPage,
-        subGroups: [...pendingSubGroups]
-    });
+    if (renamingMasterIndex >= 0) {
+        // RENAME MODE
+        groups[renamingMasterIndex].name = name;
+    } else {
+        // CREATE MODE
+        // Create master group
+        groups.push({
+            name: name,
+            page: selectedPage,
+            subGroups: [...pendingSubGroups]
+        });
 
-    // Clear pending
-    pendingSubGroups = [];
+        // Clear pending
+        pendingSubGroups = [];
 
-    // Hide save button
-    const saveBtn = document.getElementById('saveGroupBtn');
-    if (saveBtn) saveBtn.style.display = 'none';
+        // Hide save button
+        const saveBtn = document.getElementById('saveGroupBtn');
+        if (saveBtn) saveBtn.style.display = 'none';
+    }
 
     closeNamingModal();
     renderGroupList();
@@ -645,26 +677,34 @@ function removeItemFromGroup(groupIndex, itemIndex) {
     renderSourceList();
 }
 
-// Add currently selected items from Left Column to this Group
-function addSelectedToTargetGroup(groupIndex) {
-    // Check items selected in source
+// Add currently selected items from Left Column to an existing Master Group with a specific tag
+function addItemsToMasterWithTag(mgIndex, tagId) {
     const inputs = document.querySelectorAll('#sourceList .item-checkbox:checked');
-    if (inputs.length === 0) return alert('Hãy chọn items từ danh sách bên trái trước');
+    if (inputs.length === 0) return alert('Vui lòng chọn ít nhất 1 mục từ danh sách bên trái');
 
     const selectedIds = Array.from(inputs).map(i => i.value);
     const selectedItems = sourceItems.filter(i => selectedIds.includes(i.id));
 
-    // Add to group
-    groups[groupIndex].items.push(...selectedItems);
+    const mg = groups[mgIndex];
+    if (!mg) return;
+
+    // Find or create sub-group for this tag
+    let sg = mg.subGroups.find(s => s.tag === tagId);
+    if (sg) {
+        sg.items.push(...selectedItems);
+    } else {
+        mg.subGroups.push({ tag: tagId, items: selectedItems });
+    }
 
     // Mark as grouped
     selectedIds.forEach(id => groupedItemIds.add(id));
 
-    // Clear selection in source
-    inputs.forEach(i => i.checked = false);
+    // Cleanup checkboxes
+    inputs.forEach(inpt => inpt.checked = false);
 
-    renderGroupList();
     renderSourceList();
+    renderGroupList();
+    saveGroups();
 }
 
 // Toggle Group Collapse
@@ -783,6 +823,7 @@ function renderGroupList() {
                     <span>${mg.name}</span>
                 </div>
                 <div class="group-actions" onclick="event.stopPropagation()">
+                    <button class="btn-icon-small" onclick="openRenameModal(${actualIndex})" title="Đổi tên nhóm" style="color:#3498db; margin-right:5px;"><i class="fas fa-pen"></i></button>
                     <button class="btn-icon-small" onclick="removeMasterGroup(${actualIndex})" title="Xóa toàn bộ nhóm" style="color:#ef4444;"><i class="fas fa-trash"></i></button>
                 </div>
             </div>
@@ -807,6 +848,15 @@ function renderGroupList() {
                         </div>
                     `;
         }).join('')}
+            </div>
+
+            <div class="master-group-footer" style="display: ${isExpanded ? 'flex' : 'none'};">
+                <span style="font-size: 0.65rem; color: #94a3b8; font-weight: 700; width: 100%; margin-bottom: 4px;">ADD SELECTED ITEMS AS:</span>
+                ${currentTags.map(tag => `
+                    <button class="tag-mini-btn" style="background-color: ${tag.color};" onclick="addItemsToMasterWithTag(${actualIndex}, '${tag.id}')" title="Thêm mục đã chọn vào nhóm này với tag ${tag.label}">
+                        <i class="fas fa-plus"></i> ${tag.label}
+                    </button>
+                `).join('')}
             </div>
         `;
         list.appendChild(panel);

@@ -1182,6 +1182,37 @@ body.sidebar-collapsed .sidebar-tree {
     border-bottom: 2px solid #f1f5f9;
 }
 
+.master-group-footer {
+    padding: 10px 12px;
+    background: #fcfcfc;
+    border-top: 1px solid #edf2f7;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.tag-mini-btn {
+    padding: 4px 10px;
+    font-size: 0.7rem;
+    border-radius: 6px;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-weight: 700;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.tag-mini-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    filter: brightness(1.1);
+}
+
 .btn-group-save {
     margin-top: 20px;
     width: 100%;
