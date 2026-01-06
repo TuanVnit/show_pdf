@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Crop Image from PDF</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .test-container {
+            display: flex;
+            height: calc(100vh - 80px);
+            gap: 20px;
+            padding: 20px;
+            background: #f1f5f9;
+        }
+
+        .canvas-panel {
+            flex: 2;
+            background: #525659;
+            border-radius: 12px;
+            overflow: auto;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 40px;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .controls-panel {
+            flex: 1;
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            box-shadow: var(--shadow-md);
+            max-width: 400px;
+        }
+
+        #pdfCanvas {
+            background: white;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .selection-box {
+            position: absolute;
+            border: 2px solid #3498db;
+            background: rgba(52, 152, 219, 0.1);
+            display: none;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
+            cursor: move;
+        }
+
+        .handle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #3498db;
+            border: 1px solid white;
+            border-radius: 50%;
+        }
+
+        .handle-nw {
+            top: -6px;
+            left: -6px;
+            cursor: nw-resize;
+        }
+
+        .handle-n {
+            top: -6px;
+            left: 50%;
+            margin-left: -5px;
+            cursor: n-resize;
+        }
+
+        .handle-ne {
+            top: -6px;
+            right: -6px;
+            cursor: ne-resize;
+        }
+
+        .handle-e {
+            top: 50%;
+            right: -6px;
+            margin-top: -5px;
+            cursor: e-resize;
+        }
+
+        .handle-se {
+            bottom: -6px;
+            right: -6px;
+            cursor: se-resize;
+        }
+
+        .handle-s {
+            bottom: -6px;
+            left: 50%;
+            margin-left: -5px;
+            cursor: s-resize;
+        }
+
+        .handle-sw {
+            bottom: -6px;
+            left: -6px;
+            cursor: sw-resize;
+        }
+
+        .handle-w {
+            top: 50%;
+            left: -6px;
+            margin-top: -5px;
+            cursor: w-resize;
+        }
+
+        .preview-area {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            background: #f8fafc;
+        }
+
+        #cropPreview {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            background: #eee;
+        }
+
+        .action-bar {
+            display: flex;
+            gap: 10px;
+        }
+
+        .step-item {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            font-size: 0.9rem;
+            color: #64748b;
+        }
+
+        .step-item i {
+            color: var(--primary-color);
+        }
+
+        .extraction-list {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+        }
+
+        .extract-item {
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .extract-item:hover {
+            background: #f8fafc;
+        }
+
+        .extract-item.selected {
+            background: #e0f2fe;
+            border-left: 3px solid #0284c7;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="main-header">
+        <div class="header-left">
+            <a href="/" class="btn-icon header-btn"><i class="fas fa-arrow-left"></i></a>
+            <div class="logo">
+                <i class="fas fa-crop-alt"></i>
+                <span>PDF Image Cropper</span>
+            </div>
+        </div>
+        <div class="header-right">
+            <span class="badge" id="statusBadge">Sẵn sàng</span>
+        </div>
+    </header>
+
+    <div class="test-container">
+        <!-- Vùng xem PDF và chọn vùng -->
+        <div class="canvas-panel" id="canvasWrapper">
+            <canvas id="pdfCanvas"></canvas>
+            <div id="selectionBox" class="selection-box">
+                <div class="handle handle-nw" data-handle="nw"></div>
+                <div class="handle handle-n" data-handle="n"></div>
+                <div class="handle handle-ne" data-handle="ne"></div>
+                <div class="handle handle-e" data-handle="e"></div>
+                <div class="handle handle-se" data-handle="se"></div>
+                <div class="handle handle-s" data-handle="s"></div>
+                <div class="handle handle-sw" data-handle="sw"></div>
+                <div class="handle handle-w" data-handle="w"></div>
+            </div>
+        </div>
+
+        <!-- Vùng điều khiển -->
+        <div class="controls-panel">
+            <div class="section">
+                <h3 class="column-title">1. CHỌN NGUỒN</h3>
+                <div class="extraction-list" id="extractionList">
+                    <p style="padding: 10px; font-size: 0.8rem; color: #94a3b8;">Đang tải danh sách...</p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3 class="column-title">2. THÔNG TIN TRANG</h3>
+                <div class="step-item">
+                    <i class="fas fa-file-alt"></i>
+                    <span id="pdfNameInfo">Chưa chọn file</span>
+                </div>
+                <div style="margin-top: 10px;" class="action-bar">
+                    <button class="btn-secondary" onclick="changePage(-1)"><i class="fas fa-chevron-left"></i></button>
+                    <span id="pageInfo" style="line-height: 35px; font-weight: 600;">Trang 1 / 1</span>
+                    <button class="btn-secondary" onclick="changePage(1)"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3 class="column-title">3. HƯỚNG DẪN</h3>
+                <p style="font-size: 0.85rem; color: #64748b;">
+                    Dùng chuột kéo thả trên PDF để khoanh vùng. Quay lại vùng chọn để <b>di chuyển</b> hoặc kéo các
+                    <b>nút tròn</b> để thay đổi kích thước.
+                </p>
+            </div>
+
+            <div class="section">
+                <h3 class="column-title">4. KẾT QUẢ CẮT</h3>
+                <div class="preview-area">
+                    <canvas id="cropPreviewCanvas" style="display:none;"></canvas>
+                    <img id="cropPreview" alt="Preview sẽ hiện ở đây">
+                </div>
+
+                <div style="margin-top: 15px;">
+                    <label style="font-size: 0.8rem; color: #64748b; display: block; margin-bottom: 5px;">Tên file
+                        ảnh:</label>
+                    <input type="text" id="targetFilename" class="tag-select" placeholder="crop_image.png"
+                        style="width: 100%; margin-bottom: 10px;">
+                </div>
+
+                <div class="action-bar" style="flex-direction: column;">
+                    <button class="btn-primary" style="width: 100%;" onclick="saveToServer()">
+                        <i class="fas fa-server"></i> Lưu vào thư mục Images
+                    </button>
+                    <button class="btn-secondary" style="width: 100%; margin-top: 5px;" onclick="downloadCrop()">
+                        <i class="fas fa-download"></i> Tải về máy (.png)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as pdfjsLib from '/pdfjs/build/pdf.mjs';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/build/pdf.worker.mjs';
+
+        let pdfDoc = null;
+        let currentPage = 1;
+        let currentScale = 1.5;
+        let isDrawing = false;
+        let isResizing = false;
+        let isMoving = false;
+        let currentHandle = null;
+        let startX, startY;
+        let startRect = { x: 0, y: 0, w: 0, h: 0 };
+        let selectionRect = { x: 0, y: 0, w: 0, h: 0 };
+        let currentPdfUrl = '';
+
+        const canvas = document.getElementById('pdfCanvas');
+        const ctx = canvas.getContext('2d');
+        const selectionBox = document.getElementById('selectionBox');
+        const previewCanvas = document.getElementById('cropPreviewCanvas');
+        const previewImg = document.getElementById('cropPreview');
+
+        async function loadHistory() {
+            try {
+                const res = await fetch('/api/history');
+                const history = await res.json();
+                const list = document.getElementById('extractionList');
+                list.innerHTML = '';
+                history.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'extract-item';
+                    div.innerText = item.filename;
+                    div.onclick = async () => {
+                        document.querySelectorAll('.extract-item').forEach(el => el.classList.remove('selected'));
+                        div.classList.add('selected');
+                        const detailRes = await fetch(`/api/extraction/${item.id}`);
+                        const data = await detailRes.json();
+                        if (data.pdfFiles && data.pdfFiles.length > 0) {
+                            loadPDF(`/uploads/${item.id}/${data.pdfFiles[0]}`);
+                            document.getElementById('pdfNameInfo').innerText = item.filename;
+                        }
+                    };
+                    list.appendChild(div);
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        async function loadPDF(url, pageNum = 1) {
+            try {
+                currentPdfUrl = url;
+                document.getElementById('statusBadge').innerText = 'Đang tải PDF...';
+                pdfDoc = await pdfjsLib.getDocument(url).promise;
+                currentPage = parseInt(pageNum) || 1;
+                renderPage(currentPage);
+                document.getElementById('statusBadge').innerText = 'Đã tải';
+            } catch (e) {
+                console.error(e);
+                document.getElementById('statusBadge').innerText = 'Lỗi';
+            }
+        }
+
+        async function renderPage(num) {
+            const page = await pdfDoc.getPage(num);
+            const viewport = page.getViewport({ scale: currentScale });
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+            document.getElementById('pageInfo').innerText = `Trang ${num} / ${pdfDoc.numPages}`;
+            resetSelection();
+        }
+
+        window.changePage = (dir) => {
+            if (!pdfDoc) return;
+            const newPage = currentPage + dir;
+            if (newPage >= 1 && newPage <= pdfDoc.numPages) {
+                currentPage = newPage;
+                renderPage(currentPage);
+            }
+        };
+
+        function updateSelectionUI() {
+            if (selectionRect.w <= 0 || selectionRect.h <= 0) {
+                selectionBox.style.display = 'none';
+                return;
+            }
+            selectionBox.style.display = 'block';
+            selectionBox.style.left = (canvas.offsetLeft + selectionRect.x) + 'px';
+            selectionBox.style.top = (canvas.offsetTop + selectionRect.y) + 'px';
+            selectionBox.style.width = selectionRect.w + 'px';
+            selectionBox.style.height = selectionRect.h + 'px';
+        }
+
+        function resetSelection() {
+            selectionBox.style.display = 'none';
+            selectionRect = { x: 0, y: 0, w: 0, h: 0 };
+        }
+
+        window.addEventListener('mousedown', e => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            if (e.target.classList.contains('handle')) {
+                isResizing = true;
+                currentHandle = e.target.getAttribute('data-handle');
+                startX = e.clientX;
+                startY = e.clientY;
+                startRect = { ...selectionRect };
+                e.preventDefault();
+                return;
+            }
+
+            if (e.target === selectionBox) {
+                isMoving = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                startRect = { ...selectionRect };
+                e.preventDefault();
+                return;
+            }
+
+            if (e.target === canvas) {
+                isDrawing = true;
+                startX = mouseX;
+                startY = mouseY;
+                selectionRect = { x: mouseX, y: mouseY, w: 0, h: 0 };
+                updateSelectionUI();
+            } else if (e.target.id === 'canvasWrapper' || e.target.closest('.controls-panel')) {
+                // do nothing or reset
+            } else {
+                resetSelection();
+            }
+        });
+
+        window.addEventListener('mousemove', e => {
+            if (!isDrawing && !isResizing && !isMoving) return;
+            const rect = canvas.getBoundingClientRect();
+
+            if (isDrawing) {
+                let curX = e.clientX - rect.left;
+                let curY = e.clientY - rect.top;
+                curX = Math.max(0, Math.min(curX, canvas.width));
+                curY = Math.max(0, Math.min(curY, canvas.height));
+                const w = curX - startX;
+                const h = curY - startY;
+                selectionRect = {
+                    x: w > 0 ? startX : curX,
+                    y: h > 0 ? startY : curY,
+                    w: Math.abs(w),
+                    h: Math.abs(h)
+                };
+            }
+            else if (isResizing) {
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                let { x, y, w, h } = startRect;
+                if (currentHandle.includes('e')) w = Math.max(5, startRect.w + dx);
+                if (currentHandle.includes('s')) h = Math.max(5, startRect.h + dy);
+                if (currentHandle.includes('w')) {
+                    const newW = Math.max(5, startRect.w - dx);
+                    x = startRect.x + (startRect.w - newW);
+                    w = newW;
+                }
+                if (currentHandle.includes('n')) {
+                    const newH = Math.max(5, startRect.h - dy);
+                    y = startRect.y + (startRect.h - newH);
+                    h = newH;
+                }
+                if (x < 0) { w += x; x = 0; }
+                if (y < 0) { h += y; y = 0; }
+                if (x + w > canvas.width) w = canvas.width - x;
+                if (y + h > canvas.height) h = canvas.height - y;
+                selectionRect = { x, y, w, h };
+            }
+            else if (isMoving) {
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                let nx = startRect.x + dx;
+                let ny = startRect.y + dy;
+                nx = Math.max(0, Math.min(nx, canvas.width - startRect.w));
+                ny = Math.max(0, Math.min(ny, canvas.height - startRect.h));
+                selectionRect = { ...startRect, x: nx, y: ny };
+            }
+
+            updateSelectionUI();
+            if (selectionRect.w > 5 && selectionRect.h > 5) {
+                performCrop();
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDrawing = false;
+            isResizing = false;
+            isMoving = false;
+            currentHandle = null;
+        });
+
+        function performCrop() {
+            const pCtx = previewCanvas.getContext('2d');
+            previewCanvas.width = selectionRect.w;
+            previewCanvas.height = selectionRect.h;
+            pCtx.drawImage(canvas, selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h, 0, 0, selectionRect.w, selectionRect.h);
+            previewImg.src = previewCanvas.toDataURL('image/png');
+            if (!isResizing && !isMoving && !isDrawing) return; // Only update visible text while interacting if needed
+            const timestamp = new Date().getTime();
+            document.getElementById('targetFilename').value = `crop_p${currentPage}_${timestamp}.png`;
+        }
+
+        window.saveToServer = async () => {
+            if (!previewImg.src || previewImg.src.startsWith('data:image/svg')) { alert('Vui lòng chọn vùng ảnh!'); return; }
+            const filename = document.getElementById('targetFilename').value.trim() || `crop_p${currentPage}_${Date.now()}.png`;
+            let folderPath = '';
+            if (currentPdfUrl) {
+                const parts = currentPdfUrl.split('/');
+                if (parts[0] === '') parts.shift();
+                parts.pop();
+                folderPath = parts.join('/') + '/images';
+            } else { alert('Không xác định được PDF gốc!'); return; }
+
+            document.getElementById('statusBadge').innerText = 'Đang lưu ảnh...';
+            try {
+                const response = await fetch('/api/save-cropped-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: previewImg.src, folderPath: folderPath, filename: filename })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('Đã lưu ảnh thành công!');
+                    document.getElementById('statusBadge').innerText = 'Đã lưu';
+                } else { alert('Lỗi: ' + result.error); }
+            } catch (e) { alert('Lỗi kết nối!'); }
+        };
+
+        window.downloadCrop = () => {
+            if (!previewImg.src || previewImg.src.startsWith('data:image/svg')) return;
+            const link = document.createElement('a');
+            const filename = document.getElementById('targetFilename').value.trim() || `crop_p${currentPage}.png`;
+            link.download = filename.endsWith('.png') ? filename : filename + '.png';
+            link.href = previewImg.src;
+            link.click();
+        };
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const fileParam = urlParams.get('file');
+        const pageParam = urlParams.get('page');
+        loadHistory();
+        if (fileParam) {
+            loadPDF(fileParam, pageParam || 1);
+        } else {
+            loadPDF('/uploads/test1_1767156182359/test1/1/1.pdf', 1);
+            document.getElementById('pdfNameInfo').innerText = '1.pdf (Mặc định)';
+        }
+    </script>
+</body>
+
+</html>
