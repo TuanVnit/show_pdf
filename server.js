@@ -549,7 +549,7 @@ app.get(/^\/api\/excel-png\/([^\/]+)\/(.+)$/, async (req, res) => {
 
 // Helper function to convert Excel worksheet to styled HTML
 function convertWorksheetToStyledHTML(worksheet, extractPath, relativeBase) {
-    let html = '<div class="excel-wrapper" style="position: relative; display: inline-block;">';
+    let html = '<div class="excel-wrapper" style="position: relative; display: inline-block;"><!-- DEBUG_VER_2 -->';
     html += '<table class="excel-styled-table">';
 
     // Get actual row count (including empty rows)
@@ -676,7 +676,7 @@ function convertWorksheetToStyledHTML(worksheet, extractPath, relativeBase) {
             }
 
             const value = (cell.value !== null && cell.value !== undefined) ? cell.value : '';
-            let displayValue = formatCellValue(value);
+            let displayValue = formatCellValue(cell);
 
             // Handle Image Placeholders
             if (extractPath && typeof displayValue === 'string') {
@@ -930,35 +930,49 @@ function getCellStyle(cell, isMergedCell = false, mergedCellInfo = null) {
 }
 
 // Format cell value for display
-function formatCellValue(value) {
-    if (value === null || value === undefined) return '';
+function formatCellValue(cell) {
+    if (!cell || cell.value === null || cell.value === undefined) return '';
 
     let textStr = '';
+    const value = cell.value;
 
-    // Handle Rich Text (array of text objects)
-    if (typeof value === 'object' && value.richText) {
-        textStr = value.richText.map(t => t.text).join('');
+    // Priority 1: If it's a number, we format it ourselves to ensure the comma (2,547)
+    // and ignore cell.text which might be unformatted "2547" or formatted incorrectly as "2.547"
+    if (typeof value === 'number') {
+        textStr = value.toLocaleString('en-US');
     }
-    // Handle formula results
-    else if (typeof value === 'object' && value.result !== undefined) {
-        return formatCellValue(value.result);
+    // Priority 2: Use cell.text for other types (strings, formatted results)
+    else if (cell.text !== undefined && cell.text !== null && cell.text !== '' && !cell.formula) {
+        textStr = cell.text;
     }
-    // Handle dates
-    else if (value instanceof Date) {
-        textStr = value.toLocaleDateString('vi-VN');
-    }
-    // Handle numbers
-    else if (typeof value === 'number') {
-        textStr = value.toLocaleString('vi-VN');
-    }
-    // Handle objects (fallback)
-    else if (typeof value === 'object') {
-        // Try to extract text property
-        if (value.text) textStr = String(value.text);
-    }
-    // Handle strings
     else {
-        textStr = String(value);
+        // Fallback logic for specialized types
+        // Handle Rich Text (array of text objects)
+        if (typeof value === 'object' && value.richText) {
+            textStr = value.richText.map(t => t.text).join('');
+        }
+        // Handle formula results
+        else if (typeof value === 'object' && value.result !== undefined) {
+            // Recurse with just the result value
+            return formatCellValue({ value: value.result });
+        }
+        // Handle dates
+        else if (value instanceof Date) {
+            textStr = value.toLocaleDateString('en-US');
+        }
+        // Handle objects (fallback)
+        else if (typeof value === 'object') {
+            if (value.text) textStr = String(value.text);
+            else if (value.result !== undefined) textStr = String(value.result);
+        }
+        else {
+            textStr = String(value);
+        }
+    }
+
+    // If still empty but has value
+    if (textStr === '' && cell.value !== '') {
+        textStr = String(cell.value);
     }
 
     // Common escaping and formatting
