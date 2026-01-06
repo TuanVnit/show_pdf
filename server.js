@@ -26,6 +26,10 @@ app.use(express.json());
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
 
+app.get('/test-crop-image', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'test-crop.html'));
+});
+
 // Configure multer for file upload
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -1409,6 +1413,34 @@ app.post('/api/save-tags', express.json(), (req, res) => {
         res.json({ success: true });
     } catch (e) {
         console.error('Error saving tags:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/save-cropped-image', express.json({ limit: '10mb' }), async (req, res) => {
+    try {
+        const { image, folderPath, filename } = req.body;
+        if (!image || !folderPath || !filename) {
+            return res.status(400).json({ error: 'Thiếu thông tin hình ảnh, thư mục hoặc tên file.' });
+        }
+
+        // image is base64 string: "data:image/png;base64,..."
+        const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        // Target directory: e.g., uploads/test1_1767156182359/test1/1/images
+        const targetDir = path.join(__dirname, folderPath);
+        if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir, { recursive: true });
+        }
+
+        const finalPath = path.join(targetDir, filename);
+        fs.writeFileSync(finalPath, buffer);
+
+        console.log(`✅ Cropped image saved: ${finalPath}`);
+        res.json({ success: true, path: finalPath });
+    } catch (e) {
+        console.error('Error saving cropped image:', e);
         res.status(500).json({ error: e.message });
     }
 });

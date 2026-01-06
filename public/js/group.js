@@ -745,17 +745,21 @@ function updatePdfDisplay() {
     }
 
     const externalBtn = document.getElementById('groupPdfExternalBtn');
+    const cropBtn = document.getElementById('groupPdfCropBtn');
 
     if (pdfUrl) {
         // Construct PDF.js viewer URL
         // If pdfUrl already contains a hash (like #page=N), we need to split it
         let baseUrl = pdfUrl;
         let hashParams = 'handtool=1';
+        let pageNum = selectedPage || 1;
 
         if (pdfUrl.includes('#')) {
             const parts = pdfUrl.split('#');
             baseUrl = parts[0];
             hashParams = parts[1] + '&' + hashParams;
+            const pageMatch = parts[1].match(/page=(\d+)/);
+            if (pageMatch) pageNum = pageMatch[1];
         }
 
         const viewerUrl = `/pdfjs/web/viewer.html?file=${encodeURIComponent(baseUrl)}#${hashParams}`;
@@ -770,12 +774,18 @@ function updatePdfDisplay() {
             externalBtn.style.display = 'inline-flex';
         }
 
+        if (cropBtn) {
+            cropBtn.href = `/test-crop-image?file=${encodeURIComponent(baseUrl)}&page=${pageNum}`;
+            cropBtn.style.display = 'inline-flex';
+        }
+
         pdfViewer.style.display = 'block';
         if (noPdfMsg) noPdfMsg.style.display = 'none';
     } else {
         pdfViewer.style.display = 'none';
         if (noPdfMsg) noPdfMsg.style.display = 'block';
         if (externalBtn) externalBtn.style.display = 'none';
+        if (cropBtn) cropBtn.style.display = 'none';
     }
 }
 

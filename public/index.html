@@ -100,10 +100,16 @@
                         <div class="panel-column pdf-panel" style="position:relative;">
                             <div class="pdf-header" id="groupPdfHeader">
                                 <h3><i class="fas fa-file-pdf"></i> Source PDF</h3>
-                                <a id="groupPdfExternalBtn" href="#" target="_blank" class="btn-small btn-view"
-                                    style="display:none;">
-                                    <i class="fas fa-external-link-alt"></i> Mở tab mới
-                                </a>
+                                <div style="display:flex; gap:10px;">
+                                    <a id="groupPdfCropBtn" href="#" target="_blank" class="btn-small btn-view"
+                                        style="display:none;" title="Cắt ảnh từ PDF">
+                                        <i class="fas fa-crop-alt"></i> Cắt ảnh
+                                    </a>
+                                    <a id="groupPdfExternalBtn" href="#" target="_blank" class="btn-small btn-view"
+                                        style="display:none;">
+                                        <i class="fas fa-external-link-alt"></i> Mở tab mới
+                                    </a>
+                                </div>
                             </div>
                             <iframe id="pdfViewer" class="pdf-viewer" style="display:none;" onload="try { 
                                     const app = this.contentWindow.PDFViewerApplication;

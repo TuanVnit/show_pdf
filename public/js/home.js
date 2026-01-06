@@ -229,9 +229,14 @@ function renderPageContent(page, extractPath) {
             <div class="pdf-panel">
                 <div class="pdf-header">
                     <h3><i class="fas fa-file-pdf"></i> PDF Gốc</h3>
-                    <a href="${pdfUrl}" target="_blank" class="btn-small btn-view">
-                        <i class="fas fa-external-link-alt"></i> Mở tab mới
-                    </a>
+                    <div style="display:flex; gap:10px;">
+                        <a href="/test-crop-image?file=${encodeURIComponent(pdfUrl)}&page=${page.pageNumber}" target="_blank" class="btn-small btn-view" title="Cắt ảnh từ PDF">
+                            <i class="fas fa-crop-alt"></i> Cắt ảnh
+                        </a>
+                        <a href="${pdfUrl}" target="_blank" class="btn-small btn-view">
+                            <i class="fas fa-external-link-alt"></i> Mở tab mới
+                        </a>
+                    </div>
                 </div>
                 <iframe src="/pdfjs/web/viewer.html?file=${encodeURIComponent(pdfUrl)}#handtool=1" 
                         class="pdf-viewer" 
