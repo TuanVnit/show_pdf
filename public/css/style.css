@@ -900,7 +900,7 @@ body.sidebar-collapsed .sidebar-tree {
 
 .excel-styled-table {
     border-collapse: collapse;
-    width: 100%;
+    /* width: 100%; */
     font-size: 13px;
     background: white;
 }
