@@ -24,8 +24,6 @@
             overflow: auto;
             position: relative;
             display: flex;
-            justify-content: center;
-            align-items: flex-start;
             padding: 40px;
             box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3);
         }
@@ -45,6 +43,7 @@
         #pdfCanvas {
             background: white;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            margin: auto;
         }
 
         .selection-box {
@@ -265,7 +264,7 @@
 
         let pdfDoc = null;
         let currentPage = 1;
-        let currentScale = 3.0;
+        let currentScale = 4.5;
         let isDrawing = false;
         let isResizing = false;
         let isMoving = false;
