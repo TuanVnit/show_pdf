@@ -265,7 +265,7 @@
 
         let pdfDoc = null;
         let currentPage = 1;
-        let currentScale = 1.5;
+        let currentScale = 3.0;
         let isDrawing = false;
         let isResizing = false;
         let isMoving = false;
@@ -284,7 +284,8 @@
         async function loadHistory() {
             try {
                 const res = await fetch('/api/history');
-                const history = await res.json();
+                const data = await res.json();
+                const history = data.history || [];
                 const list = document.getElementById('extractionList');
                 list.innerHTML = '';
                 history.forEach(item => {
@@ -312,6 +313,7 @@
                 document.getElementById('statusBadge').innerText = 'Đang tải PDF...';
                 pdfDoc = await pdfjsLib.getDocument(url).promise;
                 currentPage = parseInt(pageNum) || 1;
+                if (currentPage > pdfDoc.numPages) currentPage = 1;
                 renderPage(currentPage);
                 document.getElementById('statusBadge').innerText = 'Đã tải';
             } catch (e) {

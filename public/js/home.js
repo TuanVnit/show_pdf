@@ -372,7 +372,7 @@ function renderImages(images, extractPath) {
                                 <button class="btn-icon-small" style="color:#ecf0f1; padding:0; background:none; border:none; cursor:pointer;" onclick="triggerFileUpload('${extractPath}', '${img.path}', '${img.filename}')" title="Replace">
                                     <i class="fas fa-upload" style="font-size:0.9em;"></i>
                                 </button>
-                                <button class="btn-icon-small delete-btn-sync" style="color:#ecf0f1; padding:0; background:none; border:none; cursor:pointer;" onclick="deleteExtractionFile('${extractPath}', '${img.path}', '${img.filename}')" title="Delete">
+                                <button class="btn-icon-small delete-btn-sync" style="color:#ecf0f1; padding:0; background:none; border:none; cursor:pointer;" onclick="deleteExtractionFile('${extractPath}', '${img.path}', '${img.filename}', this)" title="Delete">
                                     <i class="fas fa-trash-alt" style="font-size:0.9em;"></i>
                                 </button>
                             </div>
@@ -549,7 +549,7 @@ function renderTables(tables, extractPath) {
                                 <button class="btn-small btn-primary" onclick="triggerFileUpload('${extractPath}', '${table.path}', '${table.filename}')" title="Upload đè file">
                                     <i class="fas fa-upload"></i> Up
                                 </button>
-                                <button class="btn-small btn-secondary delete-btn-sync" onclick="deleteExtractionFile('${extractPath}', '${table.path}', '${table.filename}')" title="Xóa file này">
+                                <button class="btn-small btn-secondary delete-btn-sync" onclick="deleteExtractionFile('${extractPath}', '${table.path}', '${table.filename}', this)" title="Xóa file này">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
@@ -783,7 +783,7 @@ function renderText(text, extractPath, textFile) {
                             <button class="btn-small btn-download" onclick="downloadFile('/uploads/${extractPath}/${textFile.path}', '${textFile.filename}')" title="Download text gốc">
                                 <i class="fas fa-download"></i> Down
                             </button>
-                            <button class="btn-small btn-secondary delete-btn-sync" onclick="deleteExtractionFile('${extractPath}', '${textFile.path}', '${textFile.filename}')" title="Xóa file text này">
+                            <button class="btn-small btn-secondary delete-btn-sync" onclick="deleteExtractionFile('${extractPath}', '${textFile.path}', '${textFile.filename}', this)" title="Xóa file text này">
                                 <i class="fas fa-trash"></i>
                             </button>
                             ` : ''}
@@ -866,7 +866,8 @@ async function deleteExtraction(id) {
 }
 
 // Delete a specific file from extraction
-async function deleteExtractionFile(extractId, filePath, filename) {
+// Delete a specific file from extraction
+async function deleteExtractionFile(extractId, filePath, filename, btnElement) {
     if (!confirm(`Bạn có chắc muốn xóa file "${filename}"? Hành động này không thể hoàn tác.`)) return;
 
     try {
@@ -878,11 +879,26 @@ async function deleteExtractionFile(extractId, filePath, filename) {
 
         const data = await response.json();
         if (data.success) {
-            // Reload the page content to update UI
-            // Find current page info from sidebar
-            const activePageItem = document.querySelector('.page-item-tree.active');
-            if (activePageItem) {
-                activePageItem.click(); // Trigger reload
+            // Remove DOM element directly smoothly
+            if (btnElement) {
+                // Try to find the container card
+                const card = btnElement.closest('.groupable-item') ||
+                    btnElement.closest('.table-card') ||
+                    btnElement.closest('.text-card');
+
+                if (card) {
+                    card.style.transition = 'opacity 0.3s, transform 0.3s';
+                    card.style.opacity = '0';
+                    card.style.transform = 'scale(0.9)';
+                    setTimeout(() => card.remove(), 300);
+                } else {
+                    // Fallback reload if structure changed
+                    const activePageItem = document.querySelector('.page-item-tree.active');
+                    if (activePageItem) activePageItem.click();
+                }
+            } else {
+                const activePageItem = document.querySelector('.page-item-tree.active');
+                if (activePageItem) activePageItem.click();
             }
         } else {
             alert('Lỗi xóa file: ' + data.error);
