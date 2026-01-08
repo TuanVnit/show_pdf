@@ -1220,6 +1220,11 @@ async function processExtractedFiles(extractPath) {
 
                 const relativePath = actualPath === extractPath ? folder : `${path.basename(actualPath)}/${folder}`;
 
+                // Sort images explicitly by filename (A-Z)
+                imageFilesFullPaths.sort((a, b) => {
+                    return path.basename(a).localeCompare(path.basename(b), undefined, { numeric: true, sensitivity: 'base' });
+                });
+
                 pageData.images = imageFilesFullPaths.map(fullPath => {
                     // Create relative path from 'imagesPath' to file
                     // We need path relative to 'images' folder to append to existing structure

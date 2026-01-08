@@ -376,6 +376,29 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.14.0/Sortable.min.js"></script>
+    <!-- Group Naming Modal (Added Fix) -->
+    <div id="groupNamingModal" class="modal-overlay">
+        <div class="modal-content" style="width: 400px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-folder-plus"></i> Đặt tên Nhóm</h3>
+                <button onclick="closeNamingModal()"
+                    style="border:none;background:none;cursor:pointer;font-size:1.2rem;">&times;</button>
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label style="display:block; margin-bottom:8px; font-weight:500;">Tên nhóm:</label>
+                <input type="text" id="groupNameInput" class="tag-select" placeholder="Nhập tên nhóm..."
+                    style="width: 100%; font-size:1rem; padding:10px;">
+            </div>
+            <div style="text-align:right; gap:10px; display:flex; justify-content:flex-end;">
+                <button onclick="closeNamingModal()" class="btn-switch"
+                    style="width:80px; height:36px; border-radius:4px; background:#95a5a6; font-size:0.9rem;">Hủy</button>
+                <button onclick="confirmSaveGroup()" class="btn-switch"
+                    style="width:100px; height:36px; border-radius:4px; font-size:0.9rem; background:var(--primary);">Lưu
+                    Nhóm</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Tag Manager Modal -->
     <div id="tagManagerModal" class="modal-overlay">
         <div class="modal-content">
