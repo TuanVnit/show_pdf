@@ -275,8 +275,9 @@ async function runExtractionProcess(id, isAuto = false) {
         // 3. Create Lock
         fs.writeFileSync(lockFile, new Date().toISOString());
 
-        // 4. Update Status -> 1 (Processing)
+        // 4. Update Status -> 1 (Processing) + Record Start Time
         history[entryIndex].status = 1;
+        history[entryIndex].start_time = new Date().toISOString();
         fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
 
         // 5. Spawn Process
@@ -314,6 +315,9 @@ async function runExtractionProcess(id, isAuto = false) {
             const idx = currentHistory.findIndex(h => h.id === id);
 
             if (idx !== -1) {
+                const endTime = new Date().toISOString();
+                currentHistory[idx].end_time = endTime;
+
                 if (isSuccess) {
                     currentHistory[idx].status = 2;
                     try {
@@ -327,6 +331,17 @@ async function runExtractionProcess(id, isAuto = false) {
                     currentHistory[idx].status = 3;
                     console.error(`${logPrefix} Task failed for ${id}`);
                 }
+
+                // Calculate duration if start_time exists
+                if (currentHistory[idx].start_time) {
+                    const start = new Date(currentHistory[idx].start_time);
+                    const end = new Date(endTime);
+                    const durationMs = end - start;
+                    const durationSec = Math.round(durationMs / 1000);
+                    currentHistory[idx].duration_seconds = durationSec;
+                    console.log(`${logPrefix} Processing time for ${id}: ${durationSec}s`);
+                }
+
                 fs.writeFileSync(HISTORY_FILE, JSON.stringify(currentHistory, null, 2));
             }
         });
@@ -1744,21 +1759,35 @@ app.post('/api/save-cropped-image', express.json({ limit: '10mb' }), async (req,
 
 const OneDriveOAuthService = require('./onedrive-oauth');
 
-// Initialize OAuth Service
-let oneDriveOAuth = null;
-if (process.env.ONEDRIVE_CLIENT_ID && !process.env.ONEDRIVE_CLIENT_ID.includes('YOUR')) {
-    oneDriveOAuth = new OneDriveOAuthService(
-        'consumers', // Use 'consumers' for Personal accounts only
+// Factory function to create OAuth service with correct redirect URI
+function getOneDriveService(req) {
+    if (!process.env.ONEDRIVE_CLIENT_ID || process.env.ONEDRIVE_CLIENT_ID.includes('YOUR')) {
+        return null;
+    }
+
+    // Detect protocol and host from request
+    const protocol = req.protocol; // 'http' or 'https'
+    const host = req.get('host'); // 'localhost:8081' or '192.168.1.242:8082'
+    const redirectUri = `${protocol}://${host}/auth/callback`;
+
+    return new OneDriveOAuthService(
+        'consumers',
         process.env.ONEDRIVE_CLIENT_ID,
         process.env.ONEDRIVE_CLIENT_SECRET,
-        process.env.ONEDRIVE_REDIRECT_URI || 'http://localhost:8081/auth/callback'
+        redirectUri
     );
-    console.log('✅ OneDrive OAuth Service initialized');
+}
+
+// Check if OneDrive is configured
+const isOneDriveConfigured = process.env.ONEDRIVE_CLIENT_ID && !process.env.ONEDRIVE_CLIENT_ID.includes('YOUR');
+if (isOneDriveConfigured) {
+    console.log('✅ OneDrive OAuth configured (dynamic redirect URI)');
 }
 
 // Auth Routes
 app.get('/auth/login', async (req, res) => {
     try {
+        const oneDriveOAuth = getOneDriveService(req);
         if (!oneDriveOAuth) {
             return res.status(500).send('OneDrive not configured');
         }
@@ -1775,6 +1804,11 @@ app.get('/auth/callback', async (req, res) => {
         const code = req.query.code;
         if (!code) {
             return res.status(400).send('No authorization code received');
+        }
+
+        const oneDriveOAuth = getOneDriveService(req);
+        if (!oneDriveOAuth) {
+            return res.status(500).send('OneDrive not configured');
         }
 
         await oneDriveOAuth.handleCallback(code);
@@ -1798,6 +1832,7 @@ app.get('/auth/callback', async (req, res) => {
 // API: Upload to OneDrive & Get Edit Link (OAuth)
 app.post('/api/open-onedrive', async (req, res) => {
     try {
+        const oneDriveOAuth = getOneDriveService(req);
         if (!oneDriveOAuth) {
             return res.status(400).json({ error: 'OneDrive not configured' });
         }

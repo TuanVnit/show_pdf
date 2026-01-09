@@ -1,4 +1,4 @@
-// Global state
+﻿// Global state
 let allExtractions = [];
 let currentExtraction = null;
 let currentPage = null;
@@ -748,10 +748,7 @@ async function loadTable(extractPath, tablePath, filename) {
                     <div class="action-buttons">
                         <button onclick="openOneDrive('${extractPath}', '${tablePath}')" class="btn-small btn-secondary open-onedrive-btn" style="text-decoration: none; background-color: #0078D4; color: white; cursor: pointer;" title="Upload to OneDrive & Edit">
                             <i class="fas fa-file-excel"></i> Edit Online
-                        </button>
-                        <button class="btn-small btn-secondary" onclick="copyToClipboard('${networkPath.replace(/\\/g, '\\\\')}')" title="Sao chép đường dẫn mạng để sửa file">
-                            <i class="fas fa-edit"></i> Sửa file (LAN)
-                        </button>
+                        </button>                        
                         <button class="btn-small btn-download" onclick="downloadFile('/uploads/${extractPath}/${tablePath}', '${filename}')">
                             <i class="fas fa-download"></i> Tải Excel
                         </button>
