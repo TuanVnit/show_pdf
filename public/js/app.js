@@ -339,27 +339,72 @@ function renderTreeSidebar() {
             });
         };
 
+        // --- STATUS LOGIC ---
+        let statusBadge = '';
+        let actionButtons = '';
+        let statsInfo = '';
+        let clickAction = `toggleExtraction('${extraction.id}')`;
+        let itemClass = isActive ? 'active' : '';
+
+        // Status 0: New / Unprocessed
+        if (extraction.status === 0) {
+            statusBadge = '<span style="color:#f39c12; font-size:0.8em; font-weight:bold;"><i class="fas fa-pause-circle"></i> Chưa xử lý</span>';
+            actionButtons = `
+                <button class="btn-play-small" onclick="event.stopPropagation(); runProcessing('${extraction.id}')" title="Chạy xử lý" style="border:none; background:none; color: #27ae60; cursor:pointer; margin-right:5px; font-size:1.1rem;">
+                    <i class="fas fa-play-circle"></i>
+                </button>
+                <button class="btn-delete-small" onclick="event.stopPropagation(); deleteExtraction('${extraction.id}')" title="Xóa">
+                    <i class="fas fa-trash"></i>
+                </button>
+            `;
+            statsInfo = '<small style="color:#7f8c8d; font-style:italic;">Sẵn sàng chạy</small>';
+            itemClass += ' status-new';
+            clickAction = ''; // Prevent opening viewer for unprocessed items
+        }
+        // Status 1: Processing
+        else if (extraction.status === 1) {
+            statusBadge = '<span style="color:#3498db; font-size:0.8em; font-weight:bold;"><i class="fas fa-spinner fa-spin"></i> Đang xử lý...</span>';
+            actionButtons = '';
+            statsInfo = '<small style="color:#3498db">Vui lòng đợi...</small>';
+            clickAction = '';
+            itemClass += ' status-processing';
+        }
+        // Status 2: Done (or undefined/old)
+        else {
+            actionButtons = `
+                <button class="btn-delete-small" onclick="event.stopPropagation(); deleteExtraction('${extraction.id}')" title="Xóa">
+                    <i class="fas fa-trash"></i>
+                </button>
+            `;
+            statsInfo = `
+                <div class="extraction-stats">
+                    <span><i class="fas fa-file"></i> ${extraction.totalPages}</span>
+                    <span><i class="fas fa-image"></i> ${extraction.totalImages}</span>
+                    <span><i class="fas fa-table"></i> ${extraction.totalTables}</span>
+                </div>
+            `;
+        }
+
         return `
-            <div class="extraction-item ${isActive ? 'active' : ''}">
-                <div class="extraction-header" onclick="toggleExtraction('${extraction.id}')">
+            <div class="extraction-item ${itemClass}">
+                <div class="extraction-header" onclick="${clickAction}" style="${extraction.status !== 2 && extraction.status !== undefined ? 'cursor:default;' : ''}">
                     <i class="fas fa-folder ${isActive ? 'fa-folder-open' : ''}"></i>
                     <div class="extraction-info">
-                        <div class="extraction-name">${extraction.name}</div>
+                        <div class="extraction-name">
+                            ${extraction.name}
+                            ${statusBadge ? `<div style="margin-top:2px;">${statusBadge}</div>` : ''}
+                        </div>
                         <div class="extraction-meta">
                             <small>${formatDate(extraction.created)}</small>
                         </div>
-                        <div class="extraction-stats">
-                            <span><i class="fas fa-file"></i> ${extraction.totalPages}</span>
-                            <span><i class="fas fa-image"></i> ${extraction.totalImages}</span>
-                            <span><i class="fas fa-table"></i> ${extraction.totalTables}</span>
-                        </div>
+                        ${statsInfo.startsWith('<div') ? statsInfo : `<div class="extraction-stats">${statsInfo}</div>`}
                     </div>
-                    <button class="btn-delete-small" onclick="event.stopPropagation(); deleteExtraction('${extraction.id}')" title="Xóa">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                    <div style="display:flex; align-items:center;">
+                        ${actionButtons}
+                    </div>
                 </div>
                 <div class="extraction-pages" id="pages-${extraction.id}" style="display: ${isActive ? 'block' : 'none'};">
-                    ${isActive && appData ? renderPagesForExtraction() : '<p style="padding: 0.5rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">Đang tải...</p>'}
+                    ${isActive && appData ? renderPagesForExtraction() : (extraction.status === 2 || extraction.status === undefined ? '<p style="padding: 0.5rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">Đang tải...</p>' : '')}
                 </div>
             </div>
         `;
@@ -629,6 +674,39 @@ function copyText(text) {
         console.error('Failed to copy:', err);
         alert('Không thể copy');
     });
+}
+
+
+async function runProcessing(id) {
+    if (!confirm('Bắt đầu xử lý file PDF này?')) return;
+
+    // Find item and update UI optimistically
+    const item = allExtractions.find(e => e.id === id);
+    if (item) {
+        item.status = 1; // Processing
+        renderTreeSidebar(); // Update UI
+    }
+
+    try {
+        const response = await fetch(`/api/process-pdf/${id}`, { method: 'POST' });
+        const res = await response.json();
+
+        if (res.success) {
+            // Success: Reload lists
+            await loadAllExtractions(); // Will fetch new status (2) and stats
+            // Auto open the newly processed item
+            if (!currentExtraction) {
+                await loadExtractionData(id);
+            }
+        } else {
+            alert('Lỗi: ' + (res.error || 'Unknown Error'));
+            await loadAllExtractions(); // Revert
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Lỗi kết nối server');
+        await loadAllExtractions();
+    }
 }
 
 document.addEventListener('keydown', (e) => {

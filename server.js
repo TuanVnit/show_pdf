@@ -1,3 +1,5 @@
+require('dotenv').config();
+const https = require('https');
 const express = require('express');
 const multer = require('multer');
 const AdmZip = require('adm-zip');
@@ -10,9 +12,10 @@ const cors = require('cors');
 const iconv = require('iconv-lite');
 const jschardet = require('jschardet');
 const crypto = require('crypto');
+const { spawn } = require('child_process');
 
 const app = express();
-const PORT = 8081;
+const PORT = process.env.PORT || 8081;
 
 // Cache Configuration for Excel Rendering
 const CACHE_DIR = path.join('uploads', '.cache');
@@ -45,7 +48,10 @@ const storage = multer.diskStorage({
 // Example: '/personal/YOUR_CID/Documents/uploads' or 'root' depending on setup
 const CLOUD_CONFIG = {
     oneDrive: {
-        rootPath: '/personal/69551be368fd8730/Documents/uploads', // Default: Current User's Path
+        rootPath: process.env.ONEDRIVE_ROOT_PATH || '/personal/69551be368fd8730/Documents/uploads',
+        tenantId: process.env.ONEDRIVE_TENANT_ID,
+        clientId: process.env.ONEDRIVE_CLIENT_ID,
+        clientSecret: process.env.ONEDRIVE_CLIENT_SECRET,
         enabled: true
     }
 };
@@ -55,14 +61,14 @@ app.get('/api/config', (req, res) => {
     res.json(CLOUD_CONFIG);
 });
 
-const uploadZip = multer({
+const uploadPdf = multer({
     storage: storage,
     limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
     fileFilter: (req, file, cb) => {
-        if (path.extname(file.originalname).toLowerCase() === '.zip') {
+        if (path.extname(file.originalname).toLowerCase() === '.pdf') {
             cb(null, true);
         } else {
-            cb(new Error('Chỉ chấp nhận file .zip'));
+            cb(new Error('Chỉ chấp nhận file .pdf'));
         }
     }
 });
@@ -72,46 +78,59 @@ const uploadAny = multer({
     limits: { fileSize: 500 * 1024 * 1024 } // 500MB
 });
 
-// API: Upload and process ZIP file
-app.post('/api/upload', uploadZip.single('zipFile'), async (req, res) => {
-    console.log('Received upload request');
+// API: Upload PDF and init workspace
+app.post('/api/upload', uploadPdf.single('pdfFile'), async (req, res) => {
+    console.log('Received PDF upload request');
     try {
         if (!req.file) {
             return res.status(400).json({ error: 'Không có file được upload' });
         }
 
-        const zipPath = req.file.path;
+        const tempPath = req.file.path;
+        const originalName = req.file.originalname; // e.g. "MyDoc.pdf"
+        const pdfBaseName = path.basename(originalName, '.pdf'); // "MyDoc"
 
-        // Use ZIP filename (without extension) as folder name
-        const zipFilename = path.basename(req.file.originalname, '.zip');
-        // Sanitize filename to remove special characters
-        const sanitizedName = zipFilename.replace(/[^a-zA-Z0-9_\-]/g, '_');
-        // Add timestamp to avoid conflicts if same file uploaded multiple times
-        const extractPath = path.join('uploads', `${sanitizedName}_${Date.now()}`);
-        const extractId = path.basename(extractPath);
+        // Sanitize filename
+        const sanitizedName = pdfBaseName.replace(/[^a-zA-Z0-9_\-]/g, '_');
+        // Create Folder: Name + Timestamp
+        const timestamp = Date.now();
+        const extractFolderName = `${sanitizedName}_${timestamp}`;
+        const extractPath = path.join('uploads', extractFolderName);
+        const extractId = extractFolderName;
 
-        // Extract ZIP
-        const zip = new AdmZip(zipPath);
-        zip.extractAllTo(extractPath, true);
+        // Create directory
+        if (!fs.existsSync(extractPath)) {
+            fs.mkdirSync(extractPath, { recursive: true });
+        }
 
-        // Process extracted files
-        const result = await processExtractedFiles(extractPath);
+        // Move the uploaded PDF to the new folder
+        const targetPdfPath = path.join(extractPath, originalName);
+        fs.renameSync(tempPath, targetPdfPath);
 
-        // Save to history
+        // Initial Result (Unprocessed)
+        const result = {
+            totalPages: 0,
+            totalImages: 0,
+            totalTables: 0,
+            totalPdfs: 1,
+            pdfFiles: [originalName],
+            pages: [],
+            status: 0
+        };
+
+        // Save to history with STATUS 0 (Unprocessed)
         const historyEntry = {
             id: extractId,
-            filename: req.file.originalname,
+            filename: originalName,
             uploadDate: new Date().toISOString(),
             size: req.file.size,
-            totalPages: result.totalPages,
-            totalImages: result.totalImages,
-            totalTables: result.totalTables,
-            totalPdfs: result.totalPdfs // Add totalPdfs to history
+            totalPages: 0,
+            totalImages: 0,
+            totalTables: 0,
+            totalPdfs: 1,
+            status: 0 // 0 = New/Unprocessed
         };
         saveToHistory(historyEntry);
-
-        // Clean up ZIP file
-        fs.unlinkSync(zipPath);
 
         res.json({
             success: true,
@@ -121,7 +140,11 @@ app.post('/api/upload', uploadZip.single('zipFile'), async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error processing ZIP:', error);
+        console.error('Error processing upload:', error);
+        // Try to cleanup temp file if exists
+        if (req.file && fs.existsSync(req.file.path)) {
+            try { fs.unlinkSync(req.file.path); } catch (e) { }
+        }
         res.status(500).json({ error: error.message });
     }
 });
@@ -136,12 +159,12 @@ app.get('/api/history', (req, res) => {
     }
 });
 
-// API: Scan all extractions (including those not in history)
+// API: Get all extractions with status
 app.get('/api/extractions', async (req, res) => {
     try {
         const uploadsDir = 'uploads';
         const items = fs.readdirSync(uploadsDir);
-
+        const history = loadHistory(); // Load history to get status
         const extractions = [];
 
         for (const item of items) {
@@ -151,25 +174,42 @@ app.get('/api/extractions', async (req, res) => {
                 continue;
             }
 
-            // Check if it's an extraction folder (has timestamp suffix or starts with extract-)
-            const isExtractionFolder = item.startsWith('extract-') || /_\d{13}$/.test(item);
-
-            if (isExtractionFolder) {
+            // Check if it's an extraction folder
+            if (item.startsWith('extract-') || /_\d{13}$/.test(item)) {
                 try {
-                    console.log(`Processing extraction: ${item}`);
-                    const result = await processExtractedFiles(itemPath);
                     const stats = fs.statSync(itemPath);
+                    const historyItem = history.find(h => h.id === item);
+
+                    // Default values if not in history
+                    let status = 2; // Default to Done for old folders
+                    let totalPages = 0, totalImages = 0, totalTables = 0;
+
+                    if (historyItem) {
+                        status = historyItem.status !== undefined ? historyItem.status : 2;
+                        totalPages = historyItem.totalPages || 0;
+                        totalImages = historyItem.totalImages || 0;
+                        totalTables = historyItem.totalTables || 0;
+                    } else {
+                        // For old folders not in history, we scan them
+                        // const result = await processExtractedFiles(itemPath);
+                        // totalPages = result.totalPages;
+                        // totalImages = result.totalImages;
+                        // totalTables = result.totalTables;
+                        // For performance, maybe skip deep scan on list? 
+                        // Let's rely on history for speed, just basic info if missing
+                    }
 
                     extractions.push({
                         id: item,
-                        name: item,
+                        name: historyItem ? (historyItem.displayName || historyItem.filename) : item,
                         created: stats.birthtime || stats.mtime,
-                        totalPages: result.totalPages,
-                        totalImages: result.totalImages,
-                        totalTables: result.totalTables
+                        totalPages,
+                        totalImages,
+                        totalTables,
+                        status // 0=New, 1=Processing, 2=Done
                     });
                 } catch (error) {
-                    console.error(`Error processing ${item}:`, error);
+                    console.error(`Error processing info ${item}:`, error);
                 }
             }
         }
@@ -179,6 +219,243 @@ app.get('/api/extractions', async (req, res) => {
 
         res.json({ success: true, extractions });
     } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Core Processing Function (Separated for Cron Job & API usage)
+async function runExtractionProcess(id, isAuto = false) {
+    const logPrefix = isAuto ? '[Cron]' : '[API]';
+    console.log(`${logPrefix} Starting processing for: ${id}`);
+
+    // 1. Load History & Validate
+    const history = loadHistory();
+    const entryIndex = history.findIndex(h => h.id === id);
+
+    if (entryIndex === -1) {
+        return { success: false, error: 'Extraction not found in history' };
+    }
+
+    const extractPath = path.join(__dirname, 'uploads', id);
+    const lockFile = path.join(extractPath, 'lock.txt');
+
+    // 2. Check Lock
+    if (fs.existsSync(lockFile)) {
+        return { success: false, error: 'Process is currently locked/running' };
+    }
+
+    let pdfFilename = history[entryIndex].filename;
+    let pdfFullPath = path.join(extractPath, pdfFilename);
+
+    if (!fs.existsSync(pdfFullPath)) {
+        return { success: false, error: `PDF file not found: ${pdfFilename}` };
+    }
+
+    // Auto-Rename (Safe Name) Logic
+    if (pdfFilename !== 'source.pdf') {
+        const safeName = 'source.pdf';
+        const safeFullPath = path.join(extractPath, safeName);
+        try {
+            fs.renameSync(pdfFullPath, safeFullPath);
+            console.log(`[Core] Renamed '${pdfFilename}' -> '${safeName}'`);
+
+            if (!history[entryIndex].displayName) history[entryIndex].displayName = pdfFilename;
+            history[entryIndex].filename = safeName;
+            fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
+
+            pdfFilename = safeName;
+            pdfFullPath = safeFullPath;
+        } catch (e) {
+            console.error('Rename error:', e);
+            return { success: false, error: 'Rename failed: ' + e.message };
+        }
+    }
+
+    try {
+        // 3. Create Lock
+        fs.writeFileSync(lockFile, new Date().toISOString());
+
+        // 4. Update Status -> 1 (Processing)
+        history[entryIndex].status = 1;
+        fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
+
+        // 5. Spawn Process
+        const batFile = path.join(__dirname, 'ExtractAllTool.bat');
+        console.log(`${logPrefix} Executing: ${batFile} "${pdfFullPath}"`);
+
+        const child = spawn(batFile, [pdfFullPath], {
+            cwd: __dirname,
+            shell: true
+        });
+
+        child.stdout.on('data', (data) => console.log(`[CMD ${id}]: ${data}`));
+        child.stderr.on('data', (data) => console.error(`[CMD ERROR ${id}]: ${data}`));
+
+        child.on('close', async (code) => {
+            console.log(`${logPrefix} Process ${id} finished with code ${code}`);
+
+            if (fs.existsSync(lockFile)) {
+                try { fs.unlinkSync(lockFile); } catch (e) { console.error('Error removing lock:', e); }
+            }
+
+            let isSuccess = (code === 0);
+
+            try {
+                const pdfBaseName = path.basename(pdfFilename, '.pdf');
+                const statusTxtPath = path.join(extractPath, pdfBaseName, 'status.txt');
+
+                if (fs.existsSync(statusTxtPath)) {
+                    const statusContent = fs.readFileSync(statusTxtPath, 'utf8').trim();
+                    if (statusContent === '2') isSuccess = true;
+                }
+            } catch (err) { console.error('Error checking status.txt:', err); }
+
+            const currentHistory = loadHistory();
+            const idx = currentHistory.findIndex(h => h.id === id);
+
+            if (idx !== -1) {
+                if (isSuccess) {
+                    currentHistory[idx].status = 2;
+                    try {
+                        const result = await processExtractedFiles(extractPath);
+                        currentHistory[idx].totalPages = result.totalPages;
+                        currentHistory[idx].totalImages = result.totalImages;
+                        currentHistory[idx].totalTables = result.totalTables;
+                        currentHistory[idx].totalPdfs = result.totalPdfs;
+                    } catch (scanError) { console.error('Error rescanning:', scanError); }
+                } else {
+                    currentHistory[idx].status = 3;
+                    console.error(`${logPrefix} Task failed for ${id}`);
+                }
+                fs.writeFileSync(HISTORY_FILE, JSON.stringify(currentHistory, null, 2));
+            }
+        });
+
+        return { success: true, message: 'Started in background' };
+
+    } catch (error) {
+        console.error('Processing Exception:', error);
+        try { if (fs.existsSync(lockFile)) fs.unlinkSync(lockFile); } catch (e) { }
+        return { success: false, error: error.message };
+    }
+}
+
+// API: Trigger Processing for PDF
+app.post('/api/process-pdf/:id', async (req, res) => {
+    const { id } = req.params;
+    console.log(`Triggering processing for: ${id}`);
+
+    try {
+        const history = loadHistory();
+        const entryIndex = history.findIndex(h => h.id === id);
+
+        if (entryIndex === -1) {
+            return res.status(404).json({ error: 'Extraction not found in history' });
+        }
+
+        const extractPath = path.join(__dirname, 'uploads', id);
+        const lockFile = path.join(extractPath, 'lock.txt');
+
+        // Check if locked
+        if (fs.existsSync(lockFile)) {
+            return res.status(409).json({ error: 'Đang xử lý (Locked)' });
+        }
+
+        // Find PDF file path based on history filename
+        const pdfFilename = history[entryIndex].filename;
+        const pdfFullPath = path.join(extractPath, pdfFilename);
+
+        if (!fs.existsSync(pdfFullPath)) {
+            return res.status(404).json({ error: `File PDF không tồn tại: ${pdfFilename}` });
+        }
+
+        // 1. Create Lock File
+        fs.writeFileSync(lockFile, new Date().toISOString());
+
+        // 2. Update status to 1 (Processing)
+        history[entryIndex].status = 1;
+        fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
+
+        // 3. Execute Batch File
+        const batFile = path.join(__dirname, 'ExtractAllTool.bat');
+        console.log(`Executing: ${batFile} "${pdfFullPath}"`);
+
+        // Spawn process detached so it continues even if request closes? 
+        // No, standard spawn is fine, we just return response early.
+        const child = spawn(batFile, [pdfFullPath], {
+            cwd: __dirname,
+            shell: true
+        });
+
+        // Log output (Optional: store in log file in folder?)
+        child.stdout.on('data', (data) => console.log(`[CMD ${id}]: ${data}`));
+        child.stderr.on('data', (data) => console.error(`[CMD ERROR ${id}]: ${data}`));
+
+        child.on('close', async (code) => {
+            console.log(`Process ${id} finished with code ${code}`);
+
+            // Remove Lock
+            if (fs.existsSync(lockFile)) {
+                try { fs.unlinkSync(lockFile); } catch (e) { console.error('Error removing lock:', e); }
+            }
+
+            // Determine Success: Exit Code 0 AND/OR status.txt = 2
+            let isSuccess = (code === 0);
+
+            try {
+                const pdfBaseName = path.basename(pdfFilename, '.pdf');
+                const statusTxtPath = path.join(extractPath, pdfBaseName, 'status.txt');
+
+                if (fs.existsSync(statusTxtPath)) {
+                    const statusContent = fs.readFileSync(statusTxtPath, 'utf8').trim();
+                    if (statusContent === '2') {
+                        isSuccess = true;
+                    }
+                }
+            } catch (err) {
+                console.error('Error checking status.txt:', err);
+            }
+
+            // Update Status
+            const currentHistory = loadHistory();
+            const idx = currentHistory.findIndex(h => h.id === id);
+
+            if (idx !== -1) {
+                if (isSuccess) {
+                    // Success
+                    currentHistory[idx].status = 2;
+
+                    // Rescan folder to get actual stats (images, tables generated)
+                    try {
+                        const result = await processExtractedFiles(extractPath);
+                        currentHistory[idx].totalPages = result.totalPages;
+                        currentHistory[idx].totalImages = result.totalImages;
+                        currentHistory[idx].totalTables = result.totalTables;
+                        currentHistory[idx].totalPdfs = result.totalPdfs;
+                    } catch (scanError) {
+                        console.error('Error rescanning folder stats:', scanError);
+                    }
+                } else {
+                    // Failure
+                    console.error(`Process failed with code ${code}`);
+                    currentHistory[idx].status = 3; // 3 = Error
+                }
+
+                fs.writeFileSync(HISTORY_FILE, JSON.stringify(currentHistory, null, 2));
+            }
+        });
+
+        // Return immediately to Client implies "Processing Started"
+        res.json({ success: true, message: 'Processing started in background', status: 1 });
+
+    } catch (error) {
+        console.error('Processing start error:', error);
+        // Try cleanup lock
+        try {
+            const extractPath = path.join('uploads', id);
+            if (fs.existsSync(path.join(extractPath, 'lock.txt'))) fs.unlinkSync(path.join(extractPath, 'lock.txt'));
+        } catch (e) { }
+
         res.status(500).json({ error: error.message });
     }
 });
@@ -1464,9 +1741,170 @@ app.post('/api/save-cropped-image', express.json({ limit: '10mb' }), async (req,
     }
 });
 
-// Start Server
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server running at http://localhost:${PORT}`);
-    console.log(`🌐 Accessible via LAN IP at port ${PORT}`);
-    console.log(`📁 Upload limit: ${uploadZip.limits.fileSize / 1024 / 1024}MB`);
+
+const OneDriveOAuthService = require('./onedrive-oauth');
+
+// Initialize OAuth Service
+let oneDriveOAuth = null;
+if (process.env.ONEDRIVE_CLIENT_ID && !process.env.ONEDRIVE_CLIENT_ID.includes('YOUR')) {
+    oneDriveOAuth = new OneDriveOAuthService(
+        'consumers', // Use 'consumers' for Personal accounts only
+        process.env.ONEDRIVE_CLIENT_ID,
+        process.env.ONEDRIVE_CLIENT_SECRET,
+        process.env.ONEDRIVE_REDIRECT_URI || 'http://localhost:8081/auth/callback'
+    );
+    console.log('✅ OneDrive OAuth Service initialized');
+}
+
+// Auth Routes
+app.get('/auth/login', async (req, res) => {
+    try {
+        if (!oneDriveOAuth) {
+            return res.status(500).send('OneDrive not configured');
+        }
+        const authUrl = await oneDriveOAuth.getAuthUrl();
+        res.redirect(authUrl);
+    } catch (e) {
+        console.error('Auth login error:', e);
+        res.status(500).send('Failed to initiate login');
+    }
 });
+
+app.get('/auth/callback', async (req, res) => {
+    try {
+        const code = req.query.code;
+        if (!code) {
+            return res.status(400).send('No authorization code received');
+        }
+
+        await oneDriveOAuth.handleCallback(code);
+        res.send(`
+            <html>
+                <body style="font-family: Arial; text-align: center; padding: 50px;">
+                    <h2>✅ Đăng nhập thành công!</h2>
+                    <p>Bạn có thể đóng tab này và quay lại ứng dụng.</p>
+                    <script>
+                        setTimeout(() => window.close(), 2000);
+                    </script>
+                </body>
+            </html>
+        `);
+    } catch (e) {
+        console.error('Auth callback error:', e);
+        res.status(500).send('Authentication failed: ' + e.message);
+    }
+});
+
+// API: Upload to OneDrive & Get Edit Link (OAuth)
+app.post('/api/open-onedrive', async (req, res) => {
+    try {
+        if (!oneDriveOAuth) {
+            return res.status(400).json({ error: 'OneDrive not configured' });
+        }
+
+        // Check if user is authenticated
+        if (!oneDriveOAuth.isAuthenticated()) {
+            return res.json({
+                success: false,
+                requireAuth: true,
+                authUrl: '/auth/login'
+            });
+        }
+
+        const { extractId, filePath } = req.body;
+
+        // Resolve Local File
+        let localFullPath;
+        if (filePath) {
+            localFullPath = path.join(__dirname, 'uploads', extractId, filePath);
+        } else {
+            const extractPath = path.join(__dirname, 'uploads', extractId);
+            if (fs.existsSync(extractPath)) {
+                const files = fs.readdirSync(extractPath);
+                const excel = files.find(f => f.endsWith('.xlsx'));
+                if (!excel) return res.status(404).json({ error: 'No Excel file found' });
+                localFullPath = path.join(extractPath, excel);
+            } else {
+                return res.status(404).json({ error: 'Extraction path not found' });
+            }
+        }
+
+        if (!fs.existsSync(localFullPath)) {
+            return res.status(404).json({ error: 'File not found on server' });
+        }
+
+        // Upload
+        const link = await oneDriveOAuth.uploadAndGetLink(localFullPath, 'Uploads');
+        res.json({ success: true, url: link });
+
+    } catch (e) {
+        console.error('OneDrive API Error:', e);
+        if (e.message === 'AUTH_REQUIRED') {
+            return res.json({
+                success: false,
+                requireAuth: true,
+                authUrl: '/auth/login'
+            });
+        }
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- CRON JOB: Auto-Scan for Unprocessed Items (Status 0 or 3) ---
+console.log('✅ [Cron] Background Scheduler started: SEQUENTIAL processing (One by One)...');
+setInterval(() => {
+    try {
+        const history = loadHistory();
+
+        // 1. Check if system is BUSY (Any item with status 1)
+        const isBusy = history.some(h => h.status === 1);
+        if (isBusy) {
+            // console.log('[Cron] System is busy. Waiting...');
+            return;
+        }
+
+        // 2. Pick next item (Priority: Status 0 -> Status 3)
+        const nextItem = history.find(h => h.status === 0 || h.status === 3);
+
+        if (nextItem) {
+            const extractPath = path.join(__dirname, 'uploads', nextItem.id);
+            const lockFile = path.join(extractPath, 'lock.txt');
+
+            // Only run if lock file does not exist (double safety)
+            if (!fs.existsSync(lockFile)) {
+                console.log(`[Cron] Picking next item: ${nextItem.filename} (${nextItem.id})`);
+                runExtractionProcess(nextItem.id, true);
+            }
+        }
+    } catch (e) {
+        console.error('[Cron] Error in scan loop:', e);
+    }
+}, 10000); // Run every 10 seconds
+
+// Start Servers (HTTP + HTTPS)
+const HTTP_PORT = PORT;
+const HTTPS_PORT = parseInt(PORT) + 1; // 8082
+
+// HTTP Server (for localhost)
+app.listen(HTTP_PORT, '0.0.0.0', () => {
+    console.log(`🚀 HTTP Server running at http://localhost:${HTTP_PORT}`);
+    console.log(`🌐 Accessible via LAN at http://192.168.1.242:${HTTP_PORT}`);
+});
+
+// HTTPS Server (for LAN IP with OneDrive OAuth)
+try {
+    const sslOptions = {
+        key: fs.readFileSync(path.join(__dirname, '192.168.1.242-key.pem')),
+        cert: fs.readFileSync(path.join(__dirname, '192.168.1.242.pem'))
+    };
+
+    https.createServer(sslOptions, app).listen(HTTPS_PORT, '0.0.0.0', () => {
+        console.log(`🔒 HTTPS Server running at https://localhost:${HTTPS_PORT}`);
+        console.log(`🌐 Accessible via LAN at https://192.168.1.242:${HTTPS_PORT}`);
+        console.log(`⚠️  Note: You'll see SSL warning (self-signed cert). Click "Advanced" → "Proceed"`);
+        console.log(`📁 Upload limit: ${uploadPdf.limits.fileSize / 1024 / 1024}MB`);
+    });
+} catch (e) {
+    console.warn('⚠️  HTTPS Server not started (SSL cert not found). Only HTTP available.');
+    console.warn('   To enable HTTPS for LAN IP OAuth, run: openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=192.168.1.24"');
+}

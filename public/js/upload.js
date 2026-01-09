@@ -46,8 +46,8 @@ function handleFileSelect(e) {
 
 async function handleFile(file) {
     // Validate file
-    if (!file.name.endsWith('.zip')) {
-        showError('Chỉ chấp nhận file .zip');
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+        showError('Chỉ chấp nhận file .pdf');
         return;
     }
 
@@ -60,7 +60,7 @@ async function handleFile(file) {
         showProcessing();
 
         const formData = new FormData();
-        formData.append('zipFile', file);
+        formData.append('pdfFile', file);
 
         const xhr = new XMLHttpRequest();
 
@@ -77,7 +77,7 @@ async function handleFile(file) {
         xhr.addEventListener('load', async () => {
             if (xhr.status === 200) {
                 updateProgress(50);
-                processingText.textContent = 'Đang xử lý file ZIP...';
+                processingText.textContent = 'Đang lưu file PDF...';
 
                 const response = JSON.parse(xhr.responseText);
 
@@ -140,8 +140,8 @@ function showSuccess(response) {
     errorMessage.style.display = 'none';
     successMessage.style.display = 'block';
 
-    const stats = `${response.data.totalPages} trang, ${response.data.totalImages} ảnh, ${response.data.totalTables} bảng`;
-    document.getElementById('successText').textContent = `File đã được xử lý thành công! ${stats}`;
+    const stats = `Trạng thái: Đang chờ xử lý (Status 0)`;
+    document.getElementById('successText').textContent = `File đã được upload thành công! ${stats}`;
 }
 
 function resetUpload() {

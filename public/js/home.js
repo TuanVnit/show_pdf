@@ -37,6 +37,11 @@ async function loadAllExtractions() {
             allExtractions = data.extractions;
             renderExtractionTree();
             updateGlobalStats();
+
+            // Auto-refresh if any item is processing
+            if (allExtractions.some(e => e.status === 1)) {
+                setTimeout(loadAllExtractions, 3000);
+            }
         }
     } catch (error) {
         console.error('Error loading extractions:', error);
@@ -56,7 +61,7 @@ function renderExtractionTree() {
                 <i class="fas fa-inbox"></i>
                 <p>Chưa có extraction nào</p>
                 <a href="/upload.html" class="btn-small btn-primary">
-                    <i class="fas fa-upload"></i> Upload ZIP
+                    <i class="fas fa-upload"></i> Upload PDF
                 </a>
             </div>
         `;
@@ -79,24 +84,84 @@ function renderExtractionTree() {
             });
         };
 
+        // --- STATUS LOGIC ---
+        let statusBadge = '';
+        let actionButtons = '';
+        let statsInfo = '';
+        let clickAction = `toggleExtraction('${extraction.id}')`;
+        let itemClass = isActive ? 'active' : '';
+
+        // Status 0: New / Unprocessed
+        if (extraction.status === 0) {
+            statusBadge = '<span style="color:#f39c12; font-size:0.8em; font-weight:bold;"><i class="fas fa-pause-circle"></i> Chưa xử lý</span>';
+            actionButtons = `
+                <button class="btn-delete-small" onclick="event.stopPropagation(); deleteExtraction('${extraction.id}')" title="Xóa">
+                    <i class="fas fa-trash"></i>
+                </button>
+                <button onclick="event.stopPropagation(); runProcessing('${extraction.id}')" title="Chạy xử lý" style="border:none; background:none; color: #27ae60; cursor:pointer; margin-left:5px; font-size:1.1rem;">
+                    <i class="fas fa-play-circle"></i>
+                </button>
+            `;
+            statsInfo = '<div class="extraction-stats"><small style="color:#7f8c8d; font-style:italic;">Sẵn sàng chạy</small></div>';
+            itemClass += ' status-new';
+            clickAction = '';
+        }
+        // Status 1: Processing
+        else if (extraction.status === 1) {
+            statusBadge = '<span style="color:#3498db; font-size:0.8em; font-weight:bold;"><i class="fas fa-spinner fa-spin"></i> Đang xử lý...</span>';
+            actionButtons = '';
+            statsInfo = '<div class="extraction-stats"><small style="color:#3498db">Vui lòng đợi...</small></div>';
+            clickAction = '';
+            itemClass += ' status-processing';
+        }
+        // Status 3: Error
+        else if (extraction.status === 3) {
+            statusBadge = '<span style="color:#e74c3c; font-size:0.8em; font-weight:bold;"><i class="fas fa-exclamation-triangle"></i> Lỗi xử lý</span>';
+            actionButtons = `
+                <button class="btn-delete-small" onclick="event.stopPropagation(); deleteExtraction('${extraction.id}')" title="Xóa">
+                    <i class="fas fa-trash"></i>
+                </button>
+                <button onclick="event.stopPropagation(); runProcessing('${extraction.id}')" title="Thử lại" style="border:none; background:none; color: #e67e22; cursor:pointer; margin-left:5px; font-size:1.1rem;">
+                    <i class="fas fa-redo"></i>
+                </button>
+            `;
+            statsInfo = '<div class="extraction-stats"><small style="color:#e74c3c">Có lỗi xảy ra</small></div>';
+            itemClass += ' status-error';
+            clickAction = '';
+        }
+        // Status 2: Done (or undefined/old)
+        else {
+            actionButtons = `
+                <button class="btn-delete-small" onclick="event.stopPropagation(); deleteExtraction('${extraction.id}')" title="Xóa">
+                    <i class="fas fa-trash"></i>
+                </button>
+            `;
+            statsInfo = `
+                <div class="extraction-stats">
+                    <span><i class="fas fa-file"></i> ${extraction.totalPages}</span>
+                    <span><i class="fas fa-image"></i> ${extraction.totalImages}</span>
+                    <span><i class="fas fa-table"></i> ${extraction.totalTables}</span>
+                </div>
+            `;
+        }
+
         return `
-            <div class="extraction-item ${isActive ? 'active' : ''}" id="extraction-${extraction.id}">
-                <div class="extraction-header" onclick="toggleExtraction('${extraction.id}')">
+            <div class="extraction-item ${itemClass}" id="extraction-${extraction.id}">
+                <div class="extraction-header" onclick="${clickAction}" style="${extraction.status !== 2 && extraction.status !== undefined ? 'cursor:default;' : ''}">
                     <i class="fas ${isActive ? 'fa-folder-open' : 'fa-folder'}"></i>
                     <div class="extraction-info">
-                        <div class="extraction-name" title="${extraction.name}">${extraction.name}</div>
+                        <div class="extraction-name" title="${extraction.name}">
+                            ${extraction.name}
+                            ${statusBadge ? `<div style="margin-top:2px;">${statusBadge}</div>` : ''}
+                        </div>
                         <div class="extraction-meta">
                             <small><i class="fas fa-clock"></i> ${formatDate(extraction.created)}</small>
                         </div>
-                        <div class="extraction-stats">
-                            <span><i class="fas fa-file"></i> ${extraction.totalPages}</span>
-                            <span><i class="fas fa-image"></i> ${extraction.totalImages}</span>
-                            <span><i class="fas fa-table"></i> ${extraction.totalTables}</span>
-                        </div>
+                        ${statsInfo}
                     </div>
-                    <button class="btn-delete-small" onclick="event.stopPropagation(); deleteExtraction('${extraction.id}')" title="Xóa">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                    <div style="display:flex; align-items:center;">
+                        ${actionButtons}
+                    </div>
                 </div>
                 <div class="extraction-pages" id="pages-${extraction.id}" style="display: ${isActive ? 'block' : 'none'};">
                     ${isActive ? '<p class="loading-small">Đang tải pages...</p>' : ''}
@@ -681,9 +746,9 @@ async function loadTable(extractPath, tablePath, filename) {
                 <div class="table-footer">
                     <span>Sheet: ${data.sheetName} • ${data.rowCount} dòng x ${data.columnCount} cột</span>
                     <div class="action-buttons">
-                        <a href="${oneDriveLink}" target="_blank" class="btn-small btn-secondary open-onedrive-btn" style="text-decoration: none; background-color: #0078D4; color: white;" title="Mở thư mục chứa file trên OneDrive">
-                            <i class="fas fa-folder-open"></i> Edit Online
-                        </a>
+                        <button onclick="openOneDrive('${extractPath}', '${tablePath}')" class="btn-small btn-secondary open-onedrive-btn" style="text-decoration: none; background-color: #0078D4; color: white; cursor: pointer;" title="Upload to OneDrive & Edit">
+                            <i class="fas fa-file-excel"></i> Edit Online
+                        </button>
                         <button class="btn-small btn-secondary" onclick="copyToClipboard('${networkPath.replace(/\\/g, '\\\\')}')" title="Sao chép đường dẫn mạng để sửa file">
                             <i class="fas fa-edit"></i> Sửa file (LAN)
                         </button>
@@ -1013,6 +1078,38 @@ document.addEventListener('keydown', (e) => {
 });
 
 // Toggle section visibility
+
+async function runProcessing(id) {
+    if (!confirm('Bắt đầu xử lý file PDF này?')) return;
+
+    // Find item and update UI optimistically
+    const item = allExtractions.find(e => e.id === id);
+    if (item) {
+        item.status = 1; // Processing
+        renderExtractionTree(); // Update UI
+    }
+
+    try {
+        const response = await fetch(`/api/process-pdf/${id}`, { method: 'POST' });
+        const res = await response.json();
+
+        if (res.success) {
+            // Success: Reload lists (wait a bit to ensure backend file writes are done)
+            setTimeout(async () => {
+                await loadAllExtractions();
+                // Auto open if desired, but user might want to click
+            }, 500);
+        } else {
+            alert('Lỗi: ' + (res.error || 'Unknown Error'));
+            await loadAllExtractions(); // Revert
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Lỗi kết nối server');
+        await loadAllExtractions();
+    }
+}
+
 function toggleSection(sectionId) {
     const section = document.getElementById(sectionId);
     const toggle = event.currentTarget.querySelector('.toggle-icon');
@@ -1028,4 +1125,55 @@ function toggleSection(sectionId) {
 }
 
 console.log('PDF Extract Viewer - Home page ready!');
+
+async function openOneDrive(extractPath, filePath) {
+    const btn = event.currentTarget;
+    const oldHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch('/api/open-onedrive', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ extractId: extractPath, filePath: filePath })
+        });
+
+        const res = await response.json();
+
+        if (res.requireAuth) {
+            // Need to authenticate first
+            btn.innerHTML = oldHtml;
+            btn.disabled = false;
+
+            if (!confirm('Bạn cần đăng nhập OneDrive lần đầu tiên. Tiếp tục?')) return;
+
+            // Open login window
+            const loginWindow = window.open(res.authUrl, 'OneDrive Login', 'width=600,height=700');
+
+            // Wait for login to complete
+            const checkLogin = setInterval(async () => {
+                if (loginWindow && loginWindow.closed) {
+                    clearInterval(checkLogin);
+                    // Retry upload after login
+                    setTimeout(() => btn.click(), 500);
+                }
+            }, 500);
+
+            return;
+        }
+
+        if (res.success && res.url) {
+            window.open(res.url, '_blank');
+        } else {
+            alert('Lỗi: ' + (res.error || 'Không nhận được link'));
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Lỗi kết nối Server');
+    } finally {
+        btn.innerHTML = oldHtml;
+        btn.disabled = false;
+    }
+}
 
