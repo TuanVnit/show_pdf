@@ -38,12 +38,28 @@ class OneDriveOAuthService {
 
     saveTokenCache(tokenResponse) {
         try {
-            fs.writeFileSync(TOKEN_CACHE_FILE, JSON.stringify({
+            console.log('[OAuth] Token Response Keys:', Object.keys(tokenResponse));
+
+            // MSAL returns different structure, need to extract properly
+            const cache = {
                 accessToken: tokenResponse.accessToken,
-                refreshToken: tokenResponse.refreshToken,
-                expiresOn: tokenResponse.expiresOn
-            }));
-            this.tokenCache = tokenResponse;
+                refreshToken: tokenResponse.refreshToken || null,
+                expiresOn: tokenResponse.expiresOn,
+                account: tokenResponse.account ? {
+                    homeAccountId: tokenResponse.account.homeAccountId,
+                    username: tokenResponse.account.username
+                } : null
+            };
+
+            console.log('[OAuth] Saving token cache:', {
+                hasAccessToken: !!cache.accessToken,
+                hasRefreshToken: !!cache.refreshToken,
+                expiresOn: cache.expiresOn,
+                username: cache.account?.username
+            });
+
+            fs.writeFileSync(TOKEN_CACHE_FILE, JSON.stringify(cache, null, 2));
+            this.tokenCache = cache;
         } catch (e) {
             console.error('[OAuth] Failed to save token cache:', e);
         }
@@ -52,7 +68,8 @@ class OneDriveOAuthService {
     getAuthUrl() {
         const authCodeUrlParameters = {
             scopes: ['Files.ReadWrite', 'offline_access'],
-            redirectUri: this.redirectUri
+            redirectUri: this.redirectUri,
+            prompt: 'consent' // Force consent screen to ensure refresh token
         };
 
         return this.pca.getAuthCodeUrl(authCodeUrlParameters);

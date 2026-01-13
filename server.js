@@ -977,7 +977,7 @@ function convertWorksheetToStyledHTML(worksheet, extractPath, relativeBase) {
 
                 if (imgMatch) {
                     let imgFilename = path.basename(imgMatch[1]);
-
+					imgFilename = imgFilename.replace(/\.pdf$/i, ".png");
                     // Fix common typos    
 
                     const prefix = relativeBase ? `${relativeBase}/` : '';

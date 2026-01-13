@@ -16,8 +16,12 @@ REM ==== Tool 2: CutTable_Tool.exe ====
 dist\PDF_Toolkit\CutTable_Tool.exe "%OUTPUTFOLDER%" > "%OUTPUTFOLDER%\CutTable.log" 2>&1
 if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
+REM ==== Tool 2: CutTable_Tool.exe ====
+dist\PDF_Toolkit\CutChart_Tool.exe "%OUTPUTFOLDER%" --format pdf > "%OUTPUTFOLDER%\CutChart.log" 2>&1
+if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
+
 REM ==== Tool 3: CutImage_Tool.exe ====
-dist\PDF_Toolkit\CutImage_Tool.exe "%OUTPUTFOLDER%" > "%OUTPUTFOLDER%\CutImage.log" 2>&1
+dist\PDF_Toolkit\CutImage_Tool.exe "%OUTPUTFOLDER%" --format pdf > "%OUTPUTFOLDER%\CutImage.log" 2>&1
 if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
 REM ==== Tool 4: ExportWord_Tool.exe ====
@@ -28,7 +32,7 @@ REM ==== Tool 5: CopyTable.exe ====
 dist\ExtractTableTool\CopyTable.exe "%OUTPUTFOLDER%" > "%OUTPUTFOLDER%\CopyTable.log" 2>&1
 if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
-REM ==== Viết status.txt với value=2 ====
+REM ==== output status.txt value=2 ====
 echo 2 > "%OUTPUTFOLDER%\status.txt"
 
 exit /b 0
