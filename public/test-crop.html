@@ -343,7 +343,12 @@
             try {
                 currentPdfUrl = url;
                 document.getElementById('statusBadge').innerText = 'Đang tải PDF...';
-                pdfDoc = await pdfjsLib.getDocument(url).promise;
+                pdfDoc = await pdfjsLib.getDocument({
+                    url: url,
+                    cMapUrl: '/pdfjs/web/cmaps/',
+                    cMapPacked: true,
+                    standardFontDataUrl: '/pdfjs/web/standard_fonts/'
+                }).promise;
                 currentPage = parseInt(pageNum) || 1;
                 if (currentPage > pdfDoc.numPages) currentPage = 1;
                 renderPage(currentPage);
