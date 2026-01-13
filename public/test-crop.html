@@ -204,12 +204,8 @@
 
         <!-- Vùng điều khiển -->
         <div class="controls-panel">
-            <div class="section">
-                <h3 class="column-title">1. CHỌN NGUỒN</h3>
-                <div class="extraction-list" id="extractionList">
-                    <p style="padding: 10px; font-size: 0.8rem; color: #94a3b8;">Đang tải danh sách...</p>
-                </div>
-            </div>
+            <!-- Mục chọn nguồn ẩn đi để tiết kiệm không gian -->
+            <div id="extractionList" style="display: none;"></div>
 
             <div class="section">
                 <h3 class="column-title">2. THÔNG TIN TRANG</h3>
@@ -248,6 +244,23 @@
             </div>
 
             <div class="section">
+                <h3 class="column-title">TỌA ĐỘ VÙNG CHỌN</h3>
+                <textarea id="coordsDisplay" readonly style="
+                    width: 100%;
+                    height: 80px;
+                    font-family: 'Courier New', monospace;
+                    font-size: 0.85rem;
+                    padding: 10px;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 6px;
+                    background: #f8fafc;
+                    color: #334155;
+                    resize: none;
+                    line-height: 1.6;
+                " placeholder="Kéo thả để chọn vùng crop...&#10;Tọa độ sẽ hiển thị ở đây"></textarea>
+            </div>
+
+            <div class="section">
                 <h3 class="column-title">4. KẾT QUẢ CẮT</h3>
                 <div class="preview-area">
                     <canvas id="cropPreviewCanvas" style="display:none;"></canvas>
@@ -259,6 +272,11 @@
                         ảnh:</label>
                     <input type="text" id="targetFilename" class="tag-select" placeholder="crop_image.png"
                         style="width: 100%; margin-bottom: 10px;">
+                    <label
+                        style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; color: var(--primary-color); font-weight: 600;">
+                        <input type="checkbox" id="useHQCrop" checked style="width: 16px; height: 16px;">
+                        Crop sắc nét (300 DPI - Dùng Tool)
+                    </label>
                 </div>
 
                 <div class="action-bar" style="flex-direction: column;">
@@ -368,6 +386,7 @@
         function updateSelectionUI() {
             if (selectionRect.w <= 0 || selectionRect.h <= 0) {
                 selectionBox.style.display = 'none';
+                document.getElementById('coordsDisplay').value = '';
                 return;
             }
             selectionBox.style.display = 'block';
@@ -375,6 +394,13 @@
             selectionBox.style.top = (canvas.offsetTop + selectionRect.y) + 'px';
             selectionBox.style.width = selectionRect.w + 'px';
             selectionBox.style.height = selectionRect.h + 'px';
+
+            // Cập nhật tọa độ vào textarea
+            const x1 = Math.round(selectionRect.x);
+            const y1 = Math.round(selectionRect.y);
+            const x2 = Math.round(selectionRect.x + selectionRect.w);
+            const y2 = Math.round(selectionRect.y + selectionRect.h);
+            document.getElementById('coordsDisplay').value = `x1: ${x1}, y1: ${y1}\nx2: ${x2}, y2: ${y2}\nWidth: ${Math.round(selectionRect.w)}, Height: ${Math.round(selectionRect.h)}`;
         }
 
         function resetSelection() {
@@ -494,38 +520,105 @@
         }
 
         window.saveToServer = async () => {
-            if (!previewImg.src || previewImg.src.startsWith('data:image/svg')) { alert('Vui lòng chọn vùng ảnh!'); return; }
-            const filename = document.getElementById('targetFilename').value.trim() || `crop_p${currentPage}_${Date.now()}.png`;
-            let folderPath = '';
-            if (currentPdfUrl) {
-                const parts = currentPdfUrl.split('/');
-                if (parts[0] === '') parts.shift();
-                parts.pop();
-                folderPath = parts.join('/') + '/images';
-            } else { alert('Không xác định được PDF gốc!'); return; }
+            if (selectionRect.w <= 0 || selectionRect.h <= 0) { alert('Vui lòng chọn vùng ảnh!'); return; }
 
-            document.getElementById('statusBadge').innerText = 'Đang lưu ảnh...';
+            const useHQ = document.getElementById('useHQCrop').checked;
+            const filename = document.getElementById('targetFilename').value.trim() || `crop_p${currentPage}_${Date.now()}.png`;
+
+            document.getElementById('statusBadge').innerText = 'Đang xử lý...';
+
             try {
-                const response = await fetch('/api/save-cropped-image', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: previewImg.src, folderPath: folderPath, filename: filename })
-                });
-                const result = await response.json();
-                if (result.success) {
-                    alert('Đã lưu ảnh thành công!');
-                    document.getElementById('statusBadge').innerText = 'Đã lưu';
-                } else { alert('Lỗi: ' + result.error); }
-            } catch (e) { alert('Lỗi kết nối!'); }
+                if (useHQ) {
+                    // HQ Crop using Tool
+                    const res = await fetch('/api/crop-pdf-hq', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            pdfPath: currentPdfUrl,
+                            x1: selectionRect.x / currentScale,
+                            y1: selectionRect.y / currentScale,
+                            x2: (selectionRect.x + selectionRect.w) / currentScale,
+                            y2: (selectionRect.y + selectionRect.h) / currentScale,
+                            filename: filename
+                        })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        alert('Đã lưu ảnh sắc nét 300 DPI thành công!');
+                        document.getElementById('statusBadge').innerText = 'Đã lưu (HQ)';
+                    } else {
+                        alert('Lỗi Tool: ' + result.error);
+                        document.getElementById('statusBadge').innerText = 'Lỗi Tool';
+                    }
+                } else {
+                    // Standard Canvas Crop
+                    if (!previewImg.src || previewImg.src.startsWith('data:image/svg')) { alert('Vui lòng chọn vùng!'); return; }
+                    let folderPath = '';
+                    if (currentPdfUrl) {
+                        const parts = currentPdfUrl.split('/');
+                        if (parts[0] === '') parts.shift();
+                        parts.pop();
+                        folderPath = parts.join('/') + '/images';
+                    }
+                    const response = await fetch('/api/save-cropped-image', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image: previewImg.src, folderPath: folderPath, filename: filename })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        alert('Đã lưu ảnh thành công!');
+                        document.getElementById('statusBadge').innerText = 'Đã lưu';
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Lỗi kết nối!');
+                document.getElementById('statusBadge').innerText = 'Lỗi';
+            }
         };
 
-        window.downloadCrop = () => {
-            if (!previewImg.src || previewImg.src.startsWith('data:image/svg')) return;
-            const link = document.createElement('a');
+        window.downloadCrop = async () => {
+            const useHQ = document.getElementById('useHQCrop').checked;
             const filename = document.getElementById('targetFilename').value.trim() || `crop_p${currentPage}.png`;
-            link.download = filename.endsWith('.png') ? filename : filename + '.png';
-            link.href = previewImg.src;
-            link.click();
+
+            if (useHQ) {
+                // To download HQ, we actually need to trigger save first or have a temp route
+                // For simplicity, we trigger save and then redirect to the file
+                document.getElementById('statusBadge').innerText = 'Đang tạo ảnh HQ để tải...';
+                try {
+                    const res = await fetch('/api/crop-pdf-hq', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            pdfPath: currentPdfUrl,
+                            x1: selectionRect.x / currentScale,
+                            y1: selectionRect.y / currentScale,
+                            x2: (selectionRect.x + selectionRect.w) / currentScale,
+                            y2: (selectionRect.y + selectionRect.h) / currentScale,
+                            filename: 'temp_download_' + Date.now() + '.png'
+                        })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        // Direct download by opening the resulting pngPath (which is relative to root)
+                        const link = document.createElement('a');
+                        // result.pngPath is something like "e:\...\uploads\...\images\foo.png"
+                        // we need the web path "/uploads/..."
+                        const webPath = result.pngPath.replace(/\\/g, '/').split('/uploads/')[1];
+                        link.href = '/uploads/' + webPath;
+                        link.download = filename;
+                        link.click();
+                        document.getElementById('statusBadge').innerText = 'Đã tải HQ';
+                    }
+                } catch (e) { alert('Lỗi tải HQ!'); }
+            } else {
+                if (!previewImg.src || previewImg.src.startsWith('data:image/svg')) return;
+                const link = document.createElement('a');
+                link.download = filename.endsWith('.png') ? filename : filename + '.png';
+                link.href = previewImg.src;
+                link.click();
+            }
         };
 
         const urlParams = new URLSearchParams(window.location.search);

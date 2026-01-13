@@ -977,7 +977,7 @@ function convertWorksheetToStyledHTML(worksheet, extractPath, relativeBase) {
 
                 if (imgMatch) {
                     let imgFilename = path.basename(imgMatch[1]);
-					imgFilename = imgFilename.replace(/\.pdf$/i, ".png");
+                    imgFilename = imgFilename.replace(/\.pdf$/i, ".png");
                     // Fix common typos    
 
                     const prefix = relativeBase ? `${relativeBase}/` : '';
@@ -1752,6 +1752,97 @@ app.post('/api/save-cropped-image', express.json({ limit: '10mb' }), async (req,
         res.json({ success: true, path: finalPath });
     } catch (e) {
         console.error('Error saving cropped image:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// High quality Crop API using external bat tool
+app.post('/api/crop-pdf-hq', express.json(), async (req, res) => {
+    try {
+        const { pdfPath, x1, y1, x2, y2, filename } = req.body;
+
+        if (!pdfPath || x1 === undefined || y1 === undefined || x2 === undefined || y2 === undefined || !filename) {
+            return res.status(400).json({ error: 'Missing parameters for HQ crop.' });
+        }
+
+        // 1. Resolve absolute paths
+        // pdfPath is like '/uploads/id/.../1.pdf' or 'uploads/id/.../1.pdf'
+        let cleanPdfPath = pdfPath.startsWith('/') ? pdfPath.substring(1) : pdfPath;
+        const inputPdf = path.join(__dirname, cleanPdfPath);
+
+        if (!fs.existsSync(inputPdf)) {
+            return res.status(404).json({ error: `Source PDF not found: ${inputPdf}` });
+        }
+
+        // 2. Determine output paths
+        const pdfDir = path.dirname(inputPdf);
+        const imagesDir = path.join(pdfDir, 'images');
+        const imagesPdfDir = path.join(pdfDir, 'images_pdf'); // New folder for PDF crops
+
+        if (!fs.existsSync(imagesDir)) fs.mkdirSync(imagesDir, { recursive: true });
+        if (!fs.existsSync(imagesPdfDir)) fs.mkdirSync(imagesPdfDir, { recursive: true });
+
+        // Base name without extension for the output
+        const baseName = filename.replace(/\.(png|jpg|jpeg|pdf)$/i, '');
+        const outputPdf = path.join(imagesPdfDir, baseName + '.pdf'); // Save to images_pdf
+        const outputPng = path.join(imagesDir, baseName + '.png');    // Save to images
+        const batPath = path.join(__dirname, 'CropPDF.bat');
+
+        // 3. Command: CropPDF.bat input.pdf output.pdf x1 y1 x2 y2 --png out.png --dpi 300
+        const args = [
+            inputPdf,
+            outputPdf,
+            x1.toString(),
+            y1.toString(),
+            x2.toString(),
+            y2.toString(),
+            '--png', outputPng,
+            '--dpi', '300'
+        ];
+
+        console.log(`[HQ Crop] Executing: ${batPath} ${args.join(' ')}`);
+
+        const { spawn } = require('child_process');
+        const child = spawn(batPath, args, {
+            shell: true,
+            env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }
+        });
+
+        let output = '';
+        child.stdout.on('data', (data) => { output += data.toString(); });
+        child.stderr.on('data', (data) => { output += data.toString(); });
+
+        child.on('error', (err) => {
+            console.error('[HQ Crop] Spawn error:', err);
+            if (!res.headersSent) {
+                res.status(500).json({ error: `Failed to start tool: ${err.message}` });
+            }
+        });
+
+        child.on('close', (code) => {
+            if (res.headersSent) return;
+
+            const fileExists = fs.existsSync(outputPng);
+
+            if (code === 0 || (code === 1 && fileExists)) {
+                if (code === 1) {
+                    console.log(`[HQ Crop] Tool exited with code 1 but file was created. Likely an encoding print error.`);
+                }
+                console.log(`[HQ Crop] Success: ${outputPng}`);
+                res.json({
+                    success: true,
+                    pdfPath: outputPdf,
+                    pngPath: outputPng,
+                    filename: baseName + '.png'
+                });
+            } else {
+                console.error(`[HQ Crop] Failed with code ${code}. Output: ${output}`);
+                res.status(500).json({ error: `Tool failed with code ${code}`, details: output });
+            }
+        });
+
+    } catch (e) {
+        console.error('[HQ Crop] Error:', e);
         res.status(500).json({ error: e.message });
     }
 });
