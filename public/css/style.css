@@ -1681,3 +1681,55 @@ body.sidebar-collapsed .sidebar-tree {
     background-color: rgba(0, 0, 0, 0.1);
     color: var(--primary-color);
 }
+
+/* Excel Preview Popover Styling */
+.excel-popover {
+    position: fixed;
+    z-index: 10000;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    width: 600px;
+    max-height: 400px;
+    overflow: auto;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+    padding: 15px;
+}
+
+.popover-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 150px;
+    color: var(--text-light);
+    font-size: 0.9rem;
+    gap: 10px;
+}
+
+.excel-popover table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    background: white;
+}
+
+.excel-popover th,
+.excel-popover td {
+    border: 1px solid #e2e8f0;
+    padding: 6px 8px;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.excel-popover th {
+    background: #f8fafc;
+    font-weight: 600;
+}
+
+.excel-preview-trigger {
+    cursor: help;
+    border-bottom: 1px dashed var(--primary-color);
+}

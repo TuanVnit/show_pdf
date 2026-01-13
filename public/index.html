@@ -259,22 +259,35 @@
 
     <!-- COPY PATH MODAL ENDS -->
 
+    <!-- Excel Preview Popover -->
+    <div id="excelPreviewPopover" class="excel-popover" style="display: none;">
+        <div class="popover-loading">
+            <i class="fas fa-spinner fa-spin"></i> Loading preview...
+        </div>
+        <div class="popover-content"></div>
+    </div>
+
     <!-- Group Naming Modal -->
     <div id="groupNamingModal" class="modal-overlay" style="display: none;">
         <div class="modal-content" style="max-width: 400px;">
             <div class="modal-header">
                 <h3><i class="fas fa-folder-plus"></i> Đặt tên Nhóm</h3>
-                <button class="close-modal" onclick="closeNamingModal()"><i class="fas fa-times"></i></button>
+                <button onclick="closeNamingModal()" class="btn-icon-small"><i class="fas fa-times"></i></button>
             </div>
-            <div class="modal-body">
-                <p style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 15px;">Nhập tên cho nhóm (Ví dụ:
-                    Group 1...)</p>
-                <input type="text" id="groupNameInput" class="tag-edit-input" placeholder="Tên nhóm..."
-                    style="font-size: 1.1rem; padding: 10px;">
-                <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button onclick="closeNamingModal()" class="btn-secondary" style="flex:1;">Hủy</button>
-                    <button onclick="confirmSaveGroup()" class="btn-primary" style="flex:2;">Lưu Nhóm</button>
-                </div>
+            <div class="modal-body" style="padding: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #475569;">Tên nhóm:</label>
+                <input type="text" id="groupNameInput" class="tag-edit-input" placeholder="Nhập tên nhóm..."
+                    style="width: 100%;">
+                <p style="font-size: 0.8rem; color: #64748b; margin-top: 10px;">
+                    <i class="fas fa-info-circle"></i> Tên này sẽ dùng để định danh nhóm dữ liệu khi xuất file.
+                </p>
+            </div>
+            <div class="modal-footer"
+                style="padding: 15px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; border-radius: 0 0 10px 10px;">
+                <button onclick="closeNamingModal()" class="btn-secondary"
+                    style="padding: 8px 20px; border-radius: 6px;">Hủy</button>
+                <button onclick="confirmSaveGroup()" class="btn-primary"
+                    style="padding: 8px 25px; border-radius: 6px;">Lưu Nhóm</button>
             </div>
         </div>
     </div>

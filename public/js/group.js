@@ -98,11 +98,18 @@ function renderTagManagerList() {
         inputLabel.onchange = (e) => {
             const newLabel = e.target.value.trim();
             if (!newLabel) return;
-            window.currentTags[idx].label = newLabel;
-            // Update ID if it's a generic one
-            if (window.currentTags[idx].id === tag.label.toLowerCase().replace(/\s+/g, '_')) {
-                window.currentTags[idx].id = newLabel.toLowerCase().replace(/\s+/g, '_');
+
+            // Check if label already exists (other than current)
+            const exists = window.currentTags.some((t, i) => i !== idx && t.label.toLowerCase() === newLabel.toLowerCase());
+            if (exists) {
+                alert('Tên Tag này đã tồn tại!');
+                e.target.value = tag.label;
+                return;
             }
+
+            window.currentTags[idx].label = newLabel;
+            // Always update ID to match label to keep it consistent
+            window.currentTags[idx].id = newLabel.toLowerCase().replace(/\s+/g, '_');
             loadTags();
         };
         tdLabel.appendChild(inputLabel);
@@ -145,8 +152,8 @@ function addNewTag() {
 
     const id = label.toLowerCase().replace(/\s+/g, '_');
 
-    // Check for duplicate ID
-    if (window.currentTags.some(t => t.id === id)) {
+    // Check for duplicate Label or ID
+    if (window.currentTags.some(t => t.label.toLowerCase() === label.toLowerCase() || t.id === id)) {
         return alert('Tag này đã tồn tại!');
     }
 
@@ -631,7 +638,11 @@ function renderSourceList() {
                 <input type="checkbox" class="item-checkbox" value="${item.id}">
                 ${imgHtml}
                 ${typeLabel}
-                <span class="item-content-text" style="flex:1; word-break: break-all;">${label}</span>
+                <span class="item-content-text ${item.type === 'table' ? 'excel-preview-trigger' : ''}" 
+                      style="flex:1; word-break: break-all;"
+                      ${item.type === 'table' ? `onmouseenter="showExcelPreview(event, '${item.path}')" onmouseleave="hideExcelPreview()"` : ''}>
+                      ${label}
+                </span>
             `;
         }
 
@@ -972,4 +983,80 @@ async function saveGroups() {
     } catch (e) {
         console.error('Save Error:', e);
     }
+}
+// --- Excel Preview Popover Logic ---
+let excelPreviewCache = new Map();
+
+async function showExcelPreview(event, tablePath) {
+    const popover = document.getElementById('excelPreviewPopover');
+    const content = popover.querySelector('.popover-content');
+    const loading = popover.querySelector('.popover-loading');
+
+    // Position the popover near the cursor but within viewport
+    popover.style.display = 'block';
+    popover.style.opacity = '1';
+
+    const x = event.clientX + 15;
+    const y = event.clientY + 15;
+
+    // Check viewport boundaries
+    const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+    const vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+
+    let left = x;
+    let top = y;
+
+    if (x + 620 > vw) left = vw - 630;
+    if (y + 420 > vh) top = vh - 430;
+
+    popover.style.left = left + 'px';
+    popover.style.top = top + 'px';
+
+    // Fetch data
+    const extractPath = groupExtractionId;
+    const cacheKey = `${extractPath}/${tablePath}`;
+
+    if (excelPreviewCache.has(cacheKey)) {
+        loading.style.display = 'none';
+        content.innerHTML = excelPreviewCache.get(cacheKey);
+        content.style.display = 'block';
+        return;
+    }
+
+    loading.style.display = 'flex';
+    content.style.display = 'none';
+
+    try {
+        const res = await fetch(`/api/excel-render/${extractPath}/${tablePath}?t=${Date.now()}`);
+        const data = await res.json();
+        if (data.success) {
+            // We only show first few rows for summary
+            content.innerHTML = `
+                <div style="font-weight:700; color:var(--primary-color); margin-bottom:10px; font-size: 0.85rem;">
+                    <i class="fas fa-table"></i> Xem trước: ${data.sheetName} (${data.rowCount} dòng x ${data.columnCount} cột)
+                </div>
+                <div class="excel-preview-container" style="max-height: 300px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 6px;">
+                    ${data.html}
+                </div>
+            `;
+            excelPreviewCache.set(cacheKey, content.innerHTML);
+        } else {
+            content.innerHTML = `<p style="color:var(--danger-color); padding:10px;">Không thể tải bản xem trước.</p>`;
+        }
+    } catch (e) {
+        content.innerHTML = `<p style="color:var(--danger-color); padding:10px;">Lỗi kết nối.</p>`;
+    } finally {
+        loading.style.display = 'none';
+        content.style.display = 'block';
+    }
+}
+
+function hideExcelPreview() {
+    const popover = document.getElementById('excelPreviewPopover');
+    popover.style.opacity = '0';
+    setTimeout(() => {
+        if (popover.style.opacity === '0') {
+            popover.style.display = 'none';
+        }
+    }, 200);
 }
