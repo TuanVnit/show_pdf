@@ -1,8 +1,8 @@
-﻿// Global state
-let allExtractions = [];
+﻿let allExtractions = [];
 let currentExtraction = null;
 let currentPage = null;
 let currentLightboxImage = { url: '', filename: '' };
+const pagesCache = {}; // Global cache for pages HTML: { extractionId: html }
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -108,9 +108,24 @@ function renderExtractionTree() {
         }
         // Status 1: Processing
         else if (extraction.status === 1) {
-            statusBadge = '<span style="color:#3498db; font-size:0.8em; font-weight:bold;"><i class="fas fa-spinner fa-spin"></i> Đang xử lý...</span>';
+            const prog = extraction.progress || { percent: 0, step: 'Đang chuẩn bị...', page: 0 };
+            const total = extraction.totalPages || '?';
+
+            statusBadge = `
+                <div style="width: 100%; margin-top: 5px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                        <span style="color:#3498db; font-size:0.75em; font-weight:bold;">
+                            <i class="fas fa-spinner fa-spin"></i> ${prog.step}
+                        </span>
+                        <span style="color:#3498db; font-size:0.75em; font-weight:bold;">${prog.percent}%</span>
+                    </div>
+                    <div style="width: 100%; height: 5px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
+                        <div style="width: ${prog.percent}%; height: 100%; background: #3498db; transition: width 0.8s ease;"></div>
+                    </div>
+                </div>
+            `;
             actionButtons = '';
-            statsInfo = '<div class="extraction-stats"><small style="color:#3498db">Vui lòng đợi...</small></div>';
+            statsInfo = `<div class="extraction-stats"><small style="color:#3498db">Đang xử lý trang: ${prog.page} / ${total}</small></div>`;
             clickAction = '';
             itemClass += ' status-processing';
         }
@@ -164,7 +179,7 @@ function renderExtractionTree() {
                     </div>
                 </div>
                 <div class="extraction-pages" id="pages-${extraction.id}" style="display: ${isActive ? 'block' : 'none'};">
-                    ${isActive ? '<p class="loading-small">Đang tải pages...</p>' : ''}
+                    ${isActive ? (pagesCache[extraction.id] || '<p class="loading-small">Đang tải pages...</p>') : ''}
                 </div>
             </div>
         `;
@@ -201,7 +216,7 @@ async function loadExtractionPages(extractionId) {
                 return;
             }
 
-            pagesContainer.innerHTML = data.data.pages.map((page, index) => `
+            const pagesHtml = data.data.pages.map((page, index) => `
                 <div class="page-item-tree ${currentPage === page.pageNumber ? 'active' : ''}" 
                      onclick="loadPageContent('${extractionId}', ${page.pageNumber}, ${index})">
                     <div class="page-number-small">${page.pageNumber}</div>
@@ -215,10 +230,8 @@ async function loadExtractionPages(extractionId) {
                 </div>
             `).join('');
 
-            // Auto-load first page
-            if (data.data.pages.length > 0) {
-                await loadPageContent(extractionId, data.data.pages[0].pageNumber, 0);
-            }
+            pagesCache[extractionId] = pagesHtml;
+            pagesContainer.innerHTML = pagesHtml;
         }
     } catch (error) {
         console.error('Error loading pages:', error);

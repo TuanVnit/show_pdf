@@ -162,63 +162,26 @@ app.get('/api/history', (req, res) => {
 // API: Get all extractions with status
 app.get('/api/extractions', async (req, res) => {
     try {
-        const uploadsDir = 'uploads';
-        const items = fs.readdirSync(uploadsDir);
-        const history = loadHistory(); // Load history to get status
-        const extractions = [];
+        const history = loadHistory();
+        const extractions = history.map(item => {
+            return {
+                id: item.id,
+                name: item.displayName || item.filename,
+                created: item.uploadDate,
+                totalPages: item.totalPages || 0,
+                totalImages: item.totalImages || 0,
+                totalTables: item.totalTables || 0,
+                status: item.status !== undefined ? item.status : 2, // 0=New, 1=Processing, 2=Done, 3=Error
+                progress: item.progress // Include progress data for UI
+            };
+        });
 
-        for (const item of items) {
-            const itemPath = path.join(uploadsDir, item);
-            // Skip non-directories and special files
-            if (!fs.statSync(itemPath).isDirectory() || item.startsWith('.')) {
-                continue;
-            }
-
-            // Check if it's an extraction folder
-            if (item.startsWith('extract-') || /_\d{13}$/.test(item)) {
-                try {
-                    const stats = fs.statSync(itemPath);
-                    const historyItem = history.find(h => h.id === item);
-
-                    // Default values if not in history
-                    let status = 2; // Default to Done for old folders
-                    let totalPages = 0, totalImages = 0, totalTables = 0;
-
-                    if (historyItem) {
-                        status = historyItem.status !== undefined ? historyItem.status : 2;
-                        totalPages = historyItem.totalPages || 0;
-                        totalImages = historyItem.totalImages || 0;
-                        totalTables = historyItem.totalTables || 0;
-                    } else {
-                        // For old folders not in history, we scan them
-                        // const result = await processExtractedFiles(itemPath);
-                        // totalPages = result.totalPages;
-                        // totalImages = result.totalImages;
-                        // totalTables = result.totalTables;
-                        // For performance, maybe skip deep scan on list? 
-                        // Let's rely on history for speed, just basic info if missing
-                    }
-
-                    extractions.push({
-                        id: item,
-                        name: historyItem ? (historyItem.displayName || historyItem.filename) : item,
-                        created: stats.birthtime || stats.mtime,
-                        totalPages,
-                        totalImages,
-                        totalTables,
-                        status // 0=New, 1=Processing, 2=Done
-                    });
-                } catch (error) {
-                    console.error(`Error processing info ${item}:`, error);
-                }
-            }
-        }
-
-        // Sort by creation time, newest first
+        // History is already sorted newest first by unshift(), but let's be sure
         extractions.sort((a, b) => new Date(b.created) - new Date(a.created));
 
         res.json({ success: true, extractions });
     } catch (error) {
+        console.error('Error fetching extractions:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -282,6 +245,29 @@ async function runExtractionProcess(id, isAuto = false) {
 
         // 5. Spawn Process
         const batFile = path.join(__dirname, 'ExtractAllTool.bat');
+        const pdfBaseName = path.basename(pdfFilename, '.pdf');
+        const extractRoot = path.join(extractPath, pdfBaseName);
+
+        // Try to get total pages beforehand
+        let totalPages = 0;
+        try {
+            const buffer = fs.readFileSync(pdfFullPath);
+            const content = buffer.toString('ascii', 0, Math.min(buffer.length, 1024 * 1024)); // check first MB
+            const matches = content.match(/\/Count\s+(\d+)/g);
+            if (matches) {
+                matches.forEach(m => {
+                    const c = parseInt(m.match(/\d+/)[0]);
+                    if (c > totalPages) totalPages = c;
+                });
+            }
+            if (totalPages > 0) {
+                history[entryIndex].totalPages = totalPages;
+                fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
+            }
+        } catch (e) {
+            console.warn('Could not determine total pages early:', e.message);
+        }
+
         console.log(`${logPrefix} Executing: ${batFile} "${pdfFullPath}"`);
 
         const child = spawn(batFile, [pdfFullPath], {
@@ -289,10 +275,66 @@ async function runExtractionProcess(id, isAuto = false) {
             shell: true
         });
 
+        // Progress polling state
+        let currentProgress = {
+            step: 'Starting...',
+            page: 0,
+            percent: 0,
+            lastChecked: Date.now()
+        };
+
+        const progressInterval = setInterval(() => {
+            try {
+                // Scan log files for progress
+                const logs = ['CutPDF.log', 'CutTable.log', 'CutImage.log', 'ExportWord.log', 'CopyTable.log'];
+                let foundPage = 0;
+                let currentStep = 'Processing...';
+
+                for (const logFile of logs) {
+                    const logPath = path.join(extractRoot, logFile);
+                    if (fs.existsSync(logPath)) {
+                        currentStep = logFile.replace('.log', '');
+                        // Read last few lines of current log
+                        const content = fs.readFileSync(logPath, 'utf8');
+                        // Look for patterns like "/source/1/extracted_tables" or "Processing page 1"
+                        // Support both \source\1 and /source/1 patterns
+                        const pageMatches = content.match(/[\\\/]source[\\\/](\d+)[\\\/]/g);
+                        if (pageMatches) {
+                            const lastMatch = pageMatches[pageMatches.length - 1];
+                            const pageNumMatch = lastMatch.match(/(\d+)/);
+                            if (pageNumMatch) {
+                                const pageNum = parseInt(pageNumMatch[1]);
+                                if (pageNum > foundPage) foundPage = pageNum;
+                            }
+                        }
+                    }
+                }
+
+                if (foundPage > 0) {
+                    currentProgress.page = foundPage;
+                    if (totalPages > 0) {
+                        currentProgress.percent = Math.min(99, Math.round((foundPage / totalPages) * 100));
+                    }
+                }
+                currentProgress.step = currentStep;
+
+                // Update history temporarily
+                const h = loadHistory();
+                const idx = h.findIndex(item => item.id === id);
+                if (idx !== -1 && h[idx].status === 1) {
+                    h[idx].progress = { ...currentProgress };
+                    fs.writeFileSync(HISTORY_FILE, JSON.stringify(h, null, 2));
+                }
+            } catch (err) {
+                // Silently ignore polling errors
+            }
+        }, 3000);
+
         child.stdout.on('data', (data) => console.log(`[CMD ${id}]: ${data}`));
         child.stderr.on('data', (data) => console.error(`[CMD ERROR ${id}]: ${data}`));
 
         child.on('close', async (code) => {
+            clearInterval(progressInterval);
             console.log(`${logPrefix} Process ${id} finished with code ${code}`);
 
             if (fs.existsSync(lockFile)) {
@@ -302,9 +344,7 @@ async function runExtractionProcess(id, isAuto = false) {
             let isSuccess = (code === 0);
 
             try {
-                const pdfBaseName = path.basename(pdfFilename, '.pdf');
-                const statusTxtPath = path.join(extractPath, pdfBaseName, 'status.txt');
-
+                const statusTxtPath = path.join(extractRoot, 'status.txt');
                 if (fs.existsSync(statusTxtPath)) {
                     const statusContent = fs.readFileSync(statusTxtPath, 'utf8').trim();
                     if (statusContent === '2') isSuccess = true;
@@ -317,6 +357,7 @@ async function runExtractionProcess(id, isAuto = false) {
             if (idx !== -1) {
                 const endTime = new Date().toISOString();
                 currentHistory[idx].end_time = endTime;
+                delete currentHistory[idx].progress; // Remove progress on finish
 
                 if (isSuccess) {
                     currentHistory[idx].status = 2;
@@ -696,6 +737,20 @@ app.post('/api/overwrite-file', (req, res, next) => {
             // Normal file: Move/Copy the uploaded file to the target path
             fs.copyFileSync(uploadedFile.path, targetPath);
             console.log('File written to:', targetPath);
+
+            // AUTO-DUPLICATE for Images to images_pdf
+            if (relativePath.includes('/images/') || relativePath.startsWith('images/')) {
+                const pdfRelativePath = relativePath.replace('/images/', '/images_pdf/').replace(/^images\//, 'images_pdf/');
+                const pdfTargetPath = path.join(__dirname, 'uploads', extractPath, pdfRelativePath);
+
+                const pdfTargetDir = path.dirname(pdfTargetPath);
+                if (!fs.existsSync(pdfTargetDir)) {
+                    fs.mkdirSync(pdfTargetDir, { recursive: true });
+                }
+
+                fs.copyFileSync(uploadedFile.path, pdfTargetPath);
+                console.log('Auto-duplicated to images_pdf:', pdfTargetPath);
+            }
         }
 
         // Try to unlink temp file, ignore if fails (sometimes locked or auto-cleaned)
@@ -1747,6 +1802,18 @@ app.post('/api/save-cropped-image', express.json({ limit: '10mb' }), async (req,
 
         const finalPath = path.join(targetDir, filename);
         fs.writeFileSync(finalPath, buffer);
+
+        // AUTO-DUPLICATE for Images to images_pdf
+        if (folderPath.includes('/images') || folderPath.endsWith('images')) {
+            const pdfFolderPath = folderPath.replace('/images', '/images_pdf').replace(/images$/, 'images_pdf');
+            const pdfTargetDir = path.join(__dirname, pdfFolderPath);
+            if (!fs.existsSync(pdfTargetDir)) {
+                fs.mkdirSync(pdfTargetDir, { recursive: true });
+            }
+            const pdfFinalPath = path.join(pdfTargetDir, filename);
+            fs.writeFileSync(pdfFinalPath, buffer);
+            console.log(`✅ Auto-duplicated cropped image to: ${pdfFinalPath}`);
+        }
 
         console.log(`✅ Cropped image saved: ${finalPath}`);
         res.json({ success: true, path: finalPath });
